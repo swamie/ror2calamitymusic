@@ -128,6 +128,9 @@ namespace CalamityMusic
                 ModSettingsManager.AddOption(new GenericButtonOption("Preview", "General",
                     "Play a buildup and drop into a random song from your library, to tune volume and bass from the menu. Press again to stop.",
                     "Play / Stop", director.TogglePreview));
+                ModSettingsManager.AddOption(new GenericButtonOption("Get Songs", "General",
+                    "Downloads the free Calamity, Infernum and Wrath of the Gods music mods from Steam Workshop and files every boss theme into the right folder. Opens a window; needs Python 3 (it opens the download page if you don't have it). Songs load by themselves when it finishes.",
+                    "Get Songs", RunSongInstaller));
                 ModSettingsManager.AddOption(new GenericButtonOption("Open Music Folder", "General",
                     "Opens the folder where your Calamity songs go. HOW_TO_ADD_SONGS.txt inside lists every boss folder and which song fits.",
                     "Open", OpenMusicFolder));
@@ -179,6 +182,32 @@ namespace CalamityMusic
             {
                 Log.Warning("Could not load icon: " + e.Message);
                 return null;
+            }
+        }
+
+        private void RunSongInstaller()
+        {
+            try
+            {
+                string bat = Path.Combine(Path.GetDirectoryName(Info.Location) ?? "", "tools", "Get Calamity Songs.bat");
+                if (Application.platform != RuntimePlatform.WindowsPlayer || !File.Exists(bat))
+                {
+                    Log.Warning("Song installer not found at " + bat + "; opening the instructions instead.");
+                    Application.OpenURL("https://github.com/swamie/ror2calamitymusic/blob/main/SONGS.md");
+                    return;
+                }
+                Directory.CreateDirectory(library.Root);
+                // cmd /c ""script.bat" --music "path"" : cmd strips the outer quotes.
+                var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c \"\"" + bat + "\" --music \"" + library.Root + "\"\"")
+                {
+                    UseShellExecute = true,
+                    WorkingDirectory = Path.GetDirectoryName(bat),
+                };
+                System.Diagnostics.Process.Start(psi);
+            }
+            catch (Exception e)
+            {
+                Log.Error("Could not start the song installer: " + e.Message);
             }
         }
 

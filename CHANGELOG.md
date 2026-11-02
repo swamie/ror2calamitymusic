@@ -9,3 +9,5 @@
 - Live bass boost with a look-ahead limiter, seamless looping, crossfades, pause muffle.
 - Now Playing banner styled after the Calamity/Infernum music display, pulsing with the bass.
 - Settings in Mod Options: volume, bass, buildup, banner, preview button.
+- One-click song installer (Get Songs button, or tools/get_songs.py): fetches the free Calamity music mods from Steam Workshop and files every boss theme.
+- Multi-part songs (Supreme Calamitas, Devourer of Gods, Yharon, Avatar of Emptiness...) play their parts back to back without a gap.

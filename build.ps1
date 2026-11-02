@@ -14,6 +14,8 @@ if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force "$stage\plugins\CalamityMusic" | Out-Null
 Copy-Item Thunderstore\manifest.json, Thunderstore\icon.png, README.md, CHANGELOG.md $stage
 Copy-Item "$out\CalamityMusic.dll", "$out\NLayer.dll", "$out\NVorbis.dll", Thunderstore\icon.png "$stage\plugins\CalamityMusic"
+New-Item -ItemType Directory -Force "$stage\plugins\CalamityMusic\tools" | Out-Null
+Copy-Item tools\get_songs.py, "tools\Get Calamity Songs.bat" "$stage\plugins\CalamityMusic\tools"
 
 $zip = "dist\CalamityMusic-$version.zip"
 if (Test-Path $zip) { Remove-Item $zip }

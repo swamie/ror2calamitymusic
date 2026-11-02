@@ -1,44 +1,43 @@
 # Song list and where to get it
 
-The quickest way to fill every boss folder is `tools/get_songs.py`. It copies songs you already have on your PC into the right folders with the right names. It does not download anything from YouTube.
+## One click
 
-## Step 1: get the songs
+In game: **Settings > Mod Options > Calamity Music > Get Songs**. You can also double-click `Get Calamity Songs.bat` in the mod's `tools` folder, or run `python tools/get_songs.py` from this repo.
 
-**A. Steam Workshop (free, has every in-game boss theme).** In Steam, subscribe to these tModLoader mods, then open tModLoader once so Steam downloads them. You don't need to play Terraria.
+That's it. The installer:
+1. Finds your r2modman / Thunderstore Mod Manager profile.
+2. Downloads Valve's official SteamCMD tool, then uses it to download the free music mods below from Steam Workshop. You don't need a Steam login or Terraria.
+3. Uses DM DOKURO's Bandcamp album too, if its zip is in your Downloads folder (optional).
+4. Copies every boss theme into the right folder as "Artist - Title". It skips intros, outros and remixes, and puts the rest of the mods' music (biome themes etc.) in `CalamityMusic/Unsorted`.
+5. Deletes the big downloaded files afterwards. The mod notices the new songs by itself.
 
-| Mod | What it has | Link |
+You need **Python 3**: https://www.python.org/downloads/ (tick "Add python.exe to PATH"). If you don't have it, the launcher opens that page.
+
+Options, for `get_songs.py`:
+- `--dry-run` shows what it would do without changing anything.
+- `--no-download` only uses mods you already have.
+- `--steam-user NAME` is for when Steam refuses the anonymous download. SteamCMD then asks for your password and Steam Guard code itself.
+- `--help` lists the rest.
+
+## Where the songs come from
+
+| Source | What it has | Link |
 |---|---|---|
-| Calamity Mod Music | every Calamity boss theme (DM DOKURO, PinpinNeon, CDMusic) | https://steamcommunity.com/sharedfiles/filedetails/?id=2824688266 |
-| Infernum Mode Music | the Infernum versions (PinpinNeon) | https://steamcommunity.com/sharedfiles/filedetails/?id=3458992153 |
-| Wrath of the Gods | Avatar of Emptiness, Nameless Deity, Mars themes | https://steamcommunity.com/sharedfiles/filedetails/?id=2995193002 |
+| Calamity Mod Music (Workshop, free) | every Calamity boss theme (DM DOKURO, PinpinNeon, CDMusic) | https://steamcommunity.com/sharedfiles/filedetails/?id=2824688266 |
+| Infernum Mode Music (Workshop, free) | the Infernum versions (PinpinNeon) | https://steamcommunity.com/sharedfiles/filedetails/?id=3458992153 |
+| Wrath of the Gods (Workshop, free) | Avatar of Emptiness, Nameless Deity, Mars themes | https://steamcommunity.com/sharedfiles/filedetails/?id=2995193002 |
+| *The Tale of a Cruel World* (Bandcamp, $7+, optional) | DM DOKURO's full-length album versions; supports him directly | https://dmdokuro.bandcamp.com/album/the-tale-of-a-cruel-world |
 
-tModLoader itself is free on Steam.
-
-**B. Bandcamp ($7 or more, supports DM DOKURO directly).** DM DOKURO's album *The Tale of a Cruel World* has his Calamity boss themes as full-length tracks:
-https://dmdokuro.bandcamp.com/album/the-tale-of-a-cruel-world
-
-Pick **MP3 320** or **Ogg Vorbis** when downloading. FLAC also works if you have ffmpeg installed.
-
-**Listening links (official channels):**
+Official channels to listen first:
 - DM DOKURO: https://www.youtube.com/@DMDOKURO
 - PinpinNeon: https://www.youtube.com/channel/UCfbpIwaXAPuE3kTFq1tEqDA
 - CDMusic: https://www.youtube.com/channel/UCOItBqiAAbWEdm21Mcv3g_Q
 - Heart Plus Up!: https://www.youtube.com/@HeartPlusUp
 - The Infernum OST playlist: https://www.youtube.com/playlist?list=PLi_Z42PVYivQd_jpP__Y0zNRK-vs1IT0C
 
-## Step 2: run the script
+## Multi-part songs
 
-You need Python 3 (https://www.python.org/downloads/). Start the game once with the mod installed so its folders exist, then:
-
-```
-python tools/get_songs.py
-```
-
-It finds your r2modman profile and the Workshop mods by itself. It asks for the Bandcamp zip if you have one, then copies and renames everything. Non-boss tracks from the music mods (biome themes and so on) go into `CalamityMusic/Unsorted` in case you want them.
-
-Other options: `--dry-run` shows what it would do without copying anything, and `--music PATH` points it at a specific Music folder. Run `python tools/get_songs.py --help` for the rest.
-
-Then in game: **Settings > Mod Options > Calamity Music > Rescan Music Folder**.
+Some themes come in parts in the music mods: Supreme Calamitas (three sections), Devourer of Gods (phase 1 then phase 2), Yharon, Avatar of Emptiness, Nameless Deity, the Infernum Exo Mechs and Boss Rush tiers. The installer tags these `[seq=name N]`. The mod always starts the fight at part 1 and moves on to the next part without a gap when one ends, just like in Terraria. Only the last part loops.
 
 ## The full list
 
@@ -71,15 +70,16 @@ What goes in each boss folder. Every track listed here is filled in by the scrip
 | Calamity/DevourerOfGods | Devourer of Gods | Scourge of the Universe, UNIVERSAL COLLAPSE | DM DOKURO | yes | yes |
 | Calamity/Yharon | Yharon | Infernal Catharsis (Rebirth), Roar of the Jungle Dragon | DM DOKURO | yes | yes |
 | Calamity/ExoMechs | Exo Mechs | Inferior Fabrications | PinpinNeon | yes | no |
-| Calamity/SupremeCalamitas | Supreme Witch, Calamitas | Stained, Brutal Calamity | DM DOKURO | yes | yes |
+| Calamity/SupremeCalamitas | Supreme Witch, Calamitas | Stained, Brutal Calamity (3 parts from the Workshop, whole from Bandcamp) | DM DOKURO | yes | yes |
 | Calamity/PrimordialWyrm | Primordial Wyrm | Threats of the Ocean Floor | DM DOKURO | yes | yes |
-| Calamity/BossRush | Boss Rush | Boss Rush Tier 1 to 4 | CDMusic | yes | no |
+| Calamity/BossRush | Boss Rush | Boss Rush Tier 1 to 5 | CDMusic | yes | no |
 | Calamity/MoonEscape | (moon escape after Mithrix) | UNIVERSAL COLLAPSE | DM DOKURO | yes | yes |
 | Infernum/SupremeCalamitas | Supreme Witch, Calamitas | Scars of Calamity | PinpinNeon | Infernum Mode Music | no |
 | Infernum/ExoMechs | Exo Mechs | Catastrophic Fabrications, Zenith Fabrications | PinpinNeon | Infernum Mode Music | no |
 | Infernum/PrimordialWyrm | Primordial Wyrm | Vocitus Terminus | PinpinNeon | Infernum Mode Music | no |
+| Infernum/Generic | any boss without a better match | Storm Before Dawn, Duel for a Lost Kingdom | PinpinNeon | Infernum Mode Music | no |
 | Extensions/AvatarOfEmptiness | Avatar of Emptiness (used for Voidling) | PARADISE PARASITE | ENNWAY! | Wrath of the Gods | no |
-| Extensions/NamelessDeity | Nameless Deity (used for False Son) | TWISTED GARDEN | Heart Plus Up! & ENNWAY! | Wrath of the Gods | no |
+| Extensions/NamelessDeity | Nameless Deity (used for False Son) | TWISTED GARDEN, then the final-phase theme (file name "ARIA BEYOND THE SHINING FIRMAMENT"; the official title is hidden in game) | Heart Plus Up! & ENNWAY! | Wrath of the Gods | no |
 | Extensions/Mars | XG-07 Mars (used for Xi Construct) | RAMifications | Moonburn | Wrath of the Gods | no |
 | Extensions/Generic | any boss without a better match | Edenic Whispers | ENNWAY! | Wrath of the Gods | no |
 | Extensions/Astrageldon | Astrageldon (used for Twisted Scavengers) | Cosmic Disgust | DM DOKURO | no | yes |
@@ -88,4 +88,4 @@ Notes:
 - The Bandcamp album has the three Sentinel themes as one "Servants of the Scourge" track. The script puts it in all three folders.
 - Remixes on the album (the 8-bit, 16-bit and Structured mixes, Siren's Call, the Eulogy) are skipped, because they aren't fight themes.
 - If a folder stays empty, that boss uses the Generic folder or any other song, so you never get silence.
-- The script reads songs from the Workshop mods by their file names inside the mod. If a future update renames those files and some songs land in `Unsorted`, move them into the right folder by hand. The table above says where.
+- The installer finds songs inside the Workshop mods by the file names their source code uses. If a future update renames a file and a song lands in `Unsorted`, move it into the right folder by hand. The table above says where.

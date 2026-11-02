@@ -13,10 +13,12 @@ namespace CalamityMusic.Library
     ///   [start=1:05]  begin playback 65 seconds in (skip a long intro)
     ///   [loop=0:12]   when the song loops, jump back to 0:12 instead of the very start
     ///   [gain=-3]     make this one file quieter/louder in dB
+    ///   [seq=scal 2]  part 2 of the "scal" sequence: parts in the same folder play back to back
+    ///                 (a fight always starts at the first part)
     /// </summary>
     internal sealed class TrackInfo
     {
-        private static readonly Regex TagRegex = new Regex(@"\[(start|loop|gain)\s*=\s*([^\]]+)\]", RegexOptions.IgnoreCase);
+        private static readonly Regex TagRegex = new Regex(@"\[(start|loop|gain|seq)\s*=\s*([^\]]+)\]", RegexOptions.IgnoreCase);
         private static readonly Regex JunkRegex = new Regex(@"\s*[\(\[](official\s*(audio|video|music\s*video)?|hq|hd|lyrics?|audio|full\s*song|4k|1080p)[\)\]]", RegexOptions.IgnoreCase);
 
         public string Path { get; }
@@ -27,6 +29,10 @@ namespace CalamityMusic.Library
         public double StartSeconds { get; }
         public double LoopStartSeconds { get; }
         public float GainDb { get; }
+
+        /// <summary>Sequence name (lowercase) when the file is one part of a multi-part song, else null.</summary>
+        public string Sequence { get; private set; }
+        public int SequenceIndex { get; private set; }
 
         public string Display => string.IsNullOrEmpty(Artist) ? Title : Artist + " - " + Title;
 
@@ -47,6 +53,8 @@ namespace CalamityMusic.Library
             string name = System.IO.Path.GetFileNameWithoutExtension(path);
             double start = 0, loop = -1;
             float gain = 0;
+            string sequence = null;
+            int sequenceIndex = 0;
             foreach (Match m in TagRegex.Matches(name))
             {
                 string key = m.Groups[1].Value.ToLowerInvariant();
@@ -55,6 +63,16 @@ namespace CalamityMusic.Library
                 {
                     case "start": start = ParseTime(val); break;
                     case "loop": loop = ParseTime(val); break;
+                    case "seq":
+                    {
+                        var seq = Regex.Match(val, @"^(.*?)\s*(\d+)\s*$");
+                        if (seq.Success && seq.Groups[1].Value.Trim().Length > 0)
+                        {
+                            sequence = seq.Groups[1].Value.Trim().ToLowerInvariant();
+                            sequenceIndex = int.Parse(seq.Groups[2].Value, CultureInfo.InvariantCulture);
+                        }
+                        break;
+                    }
                     case "gain":
                         float.TryParse(val.Replace("dB", "").Replace("db", "").Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out gain);
                         gain = Math.Max(-24f, Math.Min(12f, gain));
@@ -92,7 +110,7 @@ namespace CalamityMusic.Library
             }
             if (string.IsNullOrWhiteSpace(title)) title = System.IO.Path.GetFileNameWithoutExtension(path);
 
-            return new TrackInfo(path, pack, slot, artist, title, start, loop, gain);
+            return new TrackInfo(path, pack, slot, artist, title, start, loop, gain) { Sequence = sequence, SequenceIndex = sequenceIndex };
         }
 
         private static double ParseTime(string s)

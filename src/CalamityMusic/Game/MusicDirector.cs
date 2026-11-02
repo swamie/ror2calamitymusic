@@ -128,6 +128,8 @@ namespace CalamityMusic.Game
 
         private void Frame(float now, float dt)
         {
+            if (library.PollInstallMarker(dt))
+                banner.ShowHint("New songs installed. They're ready for the next fight.");
             UpdateEngineSettings(dt);
             HandleEngineEvents(now);
 
@@ -380,6 +382,17 @@ namespace CalamityMusic.Game
         private static float ImpactStrength => Mathf.Clamp01(ModConfig.ImpactStrength.Value / 100f);
         private static bool LoopSongs => ModConfig.OnSongEnd.Value == SongEndBehaviour.LoopSong;
 
+        /// <summary>
+        /// Starts a song. Parts of a multi-part song don't loop: the next part follows when one ends,
+        /// and only the last part loops.
+        /// </summary>
+        private void PlayTrack(TrackInfo track, bool loop, Transition transition)
+        {
+            bool hasNextPart = library.NextInSequence(track) != null;
+            engine.Play(track, loop && !hasNextPart, transition);
+            currentTrack = track;
+        }
+
         private TrackInfo PickFor(BossTheme t, TrackInfo avoid)
         {
             var track = library.Pick(t.Slots, ModConfig.Mode.Value, avoid, ModConfig.AnySongFallback.Value, out bool fallback);
@@ -438,7 +451,7 @@ namespace CalamityMusic.Game
                 return;
             }
             failedLoads = 0;
-            engine.Play(track, LoopSongs, Transition.Drop(ImpactStrength));
+            PlayTrack(track, LoopSongs, Transition.Drop(ImpactStrength));
             theme = t;
             currentTrack = track;
             state = State.Playing;
@@ -459,7 +472,7 @@ namespace CalamityMusic.Game
 
             failedLoads = 0;
             VanillaMusic.FadeOut();
-            engine.Play(track, LoopSongs, transition);
+            PlayTrack(track, LoopSongs, transition);
             state = State.Playing;
             kind = k;
             theme = t;
@@ -475,8 +488,7 @@ namespace CalamityMusic.Game
             var track = PickFor(t, currentTrack);
             theme = t;
             if (track == null || (currentTrack != null && track.Path == currentTrack.Path)) return;
-            engine.Play(track, LoopSongs, Transition.Crossfade(2.5f));
-            currentTrack = track;
+            PlayTrack(track, LoopSongs, Transition.Crossfade(2.5f));
             Log.Info($"Switching theme: {t.Key} -> {track}");
         }
 
@@ -490,8 +502,7 @@ namespace CalamityMusic.Game
             }
             kind = Kind.Escape;
             theme = null;
-            currentTrack = track;
-            engine.Play(track, true, Transition.Crossfade(2f));
+            PlayTrack(track, true, Transition.Crossfade(2f));
             Log.Info("Moon escape -> " + track);
         }
 
@@ -537,14 +548,21 @@ namespace CalamityMusic.Game
                 switch (e.Kind)
                 {
                     case EngineEventKind.TrackStarted:
-                        if (e.Message == "loop" || state == State.Idle || state == State.Ending) break;
-                        if (ModConfig.ShowNowPlaying.Value && e.Track != null) banner.Show(e.Track.Display);
+                        if (e.Message == "loop" || state == State.Idle || state == State.Ending || e.Track == null) break;
+                        // Later parts of a multi-part song carry straight on; the banner already showed the title.
+                        if (ModConfig.ShowNowPlaying.Value && !library.IsContinuation(e.Track)) banner.Show(e.Track.Display);
                         break;
 
                     case EngineEventKind.TrackEnding:
-                        if (state != State.Playing || LoopSongs || e.VoiceId != engine.ActiveMusicVoice) break;
-                        PlayNext(Transition.Crossfade(3f));
+                    {
+                        if (state != State.Playing || e.VoiceId != engine.ActiveMusicVoice) break;
+                        var nextPart = library.NextInSequence(e.Track);
+                        if (nextPart != null)
+                            PlayTrack(nextPart, kind == Kind.Escape || LoopSongs, Transition.Append());
+                        else if (!LoopSongs)
+                            PlayNext(Transition.Crossfade(3f));
                         break;
+                    }
 
                     case EngineEventKind.TrackEnded:
                         if (state == State.Playing && engine.ActiveMusicVoice == 0) PlayNext(Transition.FadeIn(0.3f));
@@ -589,8 +607,7 @@ namespace CalamityMusic.Game
                 ? library.PickEscape(ModConfig.Mode.Value)
                 : theme != null ? PickFor(theme, currentTrack) : null;
             if (next == null) return;
-            engine.Play(next, LoopSongs || kind == Kind.Escape, transition);
-            currentTrack = next;
+            PlayTrack(next, LoopSongs || kind == Kind.Escape, transition);
         }
 
         // ------------------------------------------------------------------ settings menu buttons

@@ -22,7 +22,7 @@ Start the game once. The mod creates its music folders and a guide.
 
 ## Adding songs
 
-**Easiest:** follow [SONGS.md](SONGS.md). Subscribe to the free Calamity music mods on Steam Workshop (and/or buy DM DOKURO's album on Bandcamp), then run `python tools/get_songs.py`. It finds those songs on your PC and files every one into the right boss folder with the right name.
+**One click:** go to **Settings > Mod Options > Calamity Music > Get Songs**. It downloads the free Calamity, Infernum and Wrath of the Gods music mods from Steam Workshop and files every boss theme into the right folder, named properly. You need Python 3. Details and the full song list are in [SONGS.md](SONGS.md).
 
 **By hand:** go to **Settings > Mod Options > Calamity Music > Open Music Folder**, or browse to
 
@@ -129,6 +129,7 @@ Everything is in **Settings > Mod Options > Calamity Music**:
 - **Music Volume**: the Calamity music volume. By default it also follows the game's Master and Music sliders.
 - **Bass Boost** and **Bass Boost Frequency**: how hard the bass hits (0 dB turns it off).
 - **Preview**: plays a buildup and drop into a random song right there in the menu so you can tune volume and bass.
+- **Get Songs**: installs all the songs for you (see above).
 - **Teleporter Buildup**: on/off, synth or your own buildup files, length, and how loud the drop impact is.
 - **Teleporter Music Ends When**: keep the theme going until the teleporter is fully charged (default) or stop when the boss dies.
 - **When A Song Ends**: loop it seamlessly, or crossfade into another song for the same boss.

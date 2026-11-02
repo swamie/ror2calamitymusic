@@ -67,6 +67,7 @@ namespace CalamityMusic.Tests
             Run("Song end events", SongEnd);
             Run("Broken files don't break the mixer", BrokenFiles);
             Run("Custom buildup files", CustomBuildup);
+            Run("Multi-part songs", MultiPart);
             Run("Library folders and picking", LibraryTest);
             Run("Boss theme mapping", ThemesTest);
 
@@ -403,6 +404,57 @@ namespace CalamityMusic.Tests
             held.Read(buf, 0, buf.Length);
             double rms = Math.Sqrt(buf.Skip(SR / 2).Select(v => (double)v * v).Average());
             Check(rms > 0.05, $"hold-only synth starts at full tension (rms {rms:0.000})");
+        }
+
+        private static void MultiPart()
+        {
+            string root = Path.Combine(outDir, "seqlib", "Music");
+            if (Directory.Exists(Path.Combine(outDir, "seqlib"))) Directory.Delete(Path.Combine(outDir, "seqlib"), true);
+            string dir = Path.Combine(root, "Calamity", "SupremeCalamitas");
+            Directory.CreateDirectory(dir);
+            // Three 2-second parts (cut from the fixture) so the hand-over happens quickly.
+            for (int i = 1; i <= 3; i++)
+                WriteWav(Path.Combine(dir, $"DM DOKURO - Stained, Brutal Calamity [seq=scal {i}].wav"), Cut(F("base.wav"), 1.0 + i, 2.0));
+            File.Copy(F("base.wav"), Path.Combine(dir, "DM DOKURO - Stained, Brutal Calamity.wav"), true);
+            var lib = new MusicLibrary(root);
+            lib.Rescan();
+
+            var part1 = TrackInfo.FromFile(Path.Combine(dir, "DM DOKURO - Stained, Brutal Calamity [seq=scal 1].wav"), "Calamity", "SupremeCalamitas");
+            Check(part1.Sequence == "scal" && part1.SequenceIndex == 1 && part1.Display == "DM DOKURO - Stained, Brutal Calamity", "seq tag parsed and hidden");
+            var picks = new HashSet<string>();
+            for (int i = 0; i < 30; i++) picks.Add(Path.GetFileName(lib.Pick(new[] { "SupremeCalamitas" }, MusicMode.Calamity, null, true, out _).Path));
+            Check(picks.Count == 2 && !picks.Any(p => p.Contains("scal 2") || p.Contains("scal 3")), "fights only start at part 1: " + string.Join(", ", picks));
+            var part2 = lib.NextInSequence(part1);
+            Check(part2 != null && part2.SequenceIndex == 2 && lib.NextInSequence(part2)?.SequenceIndex == 3, "next part found in order");
+            Check(lib.IsContinuation(part2) && !lib.IsContinuation(part1), "continuation detection");
+
+            // Gapless hand-over in the engine.
+            var engine = new MusicEngine { Volume = 1f, BassBoostDb = 0f };
+            var rec = new Recorder(engine);
+            engine.Play(part1, false, Transition.FadeIn(0.01f));
+            rec.WaitForLoad();
+            rec.Render(0.5);
+            engine.Play(part2, true, Transition.Append());
+            rec.WaitForLoad();
+            rec.Render(3.0);
+            var starts = rec.Events.Where(e => e.e.Kind == EngineEventKind.TrackStarted).ToList();
+            Check(starts.Count == 2 && Math.Abs(starts[1].time - 2.0) < 0.06, $"part 2 starts right as part 1 ends ({(starts.Count > 1 ? starts[1].time : 0):0.000}s)");
+            int run = 0, worst = 0;
+            for (int i = (int)(1.9 * SR) * 2; i < (int)(2.1 * SR) * 2; i += 2) { run = rec.Samples[i] == 0f ? run + 1 : 0; worst = Math.Max(worst, run); }
+            Check(worst < 4, $"no silence at the seam (longest zero run {worst})");
+            Check(engine.ActiveMusicVoice != 0, "part 2 is now the active song");
+        }
+
+        private static List<float> Cut(string wav, double from, double seconds)
+        {
+            using (var s = AudioDecoder.Open(wav))
+            {
+                var reader = new SincResampler(new TrackReader(s, from, 0, 0, false), SR);
+                var buf = new float[(int)(seconds * SR) * 2];
+                int got = 0, n;
+                while (got < buf.Length && (n = reader.Read(buf, got, buf.Length - got)) > 0) got += n;
+                return buf.Take(got).ToList();
+            }
         }
 
         private static void LibraryTest()

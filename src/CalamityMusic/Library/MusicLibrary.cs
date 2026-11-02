@@ -96,9 +96,9 @@ namespace CalamityMusic.Library
             sb.AppendLine("CALAMITY MUSIC - HOW TO ADD SONGS");
             sb.AppendLine("=================================");
             sb.AppendLine();
-            sb.AppendLine("Quickest way: subscribe to the free Calamity Mod Music / Infernum Mode Music / Wrath of the Gods");
-            sb.AppendLine("mods on Steam Workshop (open tModLoader once so they download), then run get_songs.py from");
-            sb.AppendLine("https://github.com/swamie/ror2calamitymusic - it files every song into the right folder for you.");
+            sb.AppendLine("Quickest way: Settings > Mod Options > Calamity Music > Get Songs. It downloads the free");
+            sb.AppendLine("Calamity / Infernum / Wrath of the Gods music mods from Steam Workshop and files every song into");
+            sb.AppendLine("the right folder for you (needs Python 3). Or run tools/Get Calamity Songs.bat in the mod's folder.");
             sb.AppendLine();
             sb.AppendLine("Or drop .ogg, .mp3 or .wav files into the folders next to this file yourself:");
             sb.AppendLine();
@@ -137,6 +137,35 @@ namespace CalamityMusic.Library
         }
 
         // ------------------------------------------------------------------ scanning
+
+        private DateTime installMarker = DateTime.MinValue;
+        private float markerTimer;
+
+        /// <summary>
+        /// The song installer script touches Music/.songs_installed when it finishes; reload when
+        /// that happens so new songs show up without pressing anything. Checked every 2 s.
+        /// </summary>
+        public bool PollInstallMarker(float dt)
+        {
+            markerTimer -= dt;
+            if (markerTimer > 0f) return false;
+            markerTimer = 2f;
+            try
+            {
+                string marker = Path.Combine(Root, ".songs_installed");
+                if (!File.Exists(marker)) return false;
+                var stamp = File.GetLastWriteTimeUtc(marker);
+                if (installMarker == DateTime.MinValue) { installMarker = stamp; return false; }
+                if (stamp == installMarker) return false;
+                installMarker = stamp;
+                RescanAsync();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         public void RescanAsync()
         {
@@ -307,6 +336,7 @@ namespace CalamityMusic.Library
                 lock (badFiles) candidates.RemoveAll(t => badFiles.Contains(t.Path));
             }
             if (candidates.Count == 0) return null;
+            candidates = FirstParts(candidates);
 
             string key = string.Join(",", slots);
             if (candidates.Count > 1)
@@ -325,7 +355,45 @@ namespace CalamityMusic.Library
             var slots = new[] { Slots.Escape };
             var c = Collect(index, slots, PrimaryPacks(mode));
             if (c.Count == 0) c = Collect(index, slots, FallbackPacks(mode));
+            c = FirstParts(c);
             return c.Count == 0 ? null : c[rng.Next(c.Count)];
+        }
+
+        /// <summary>A fight always starts a multi-part song at its first available part.</summary>
+        private static List<TrackInfo> FirstParts(List<TrackInfo> candidates)
+        {
+            var first = new Dictionary<string, int>();
+            foreach (var t in candidates)
+            {
+                if (t.Sequence == null) continue;
+                string k = t.Pack + "|" + t.Slot + "|" + t.Sequence;
+                if (!first.TryGetValue(k, out int min) || t.SequenceIndex < min) first[k] = t.SequenceIndex;
+            }
+            if (first.Count == 0) return candidates;
+            return candidates.Where(t => t.Sequence == null || first[t.Pack + "|" + t.Slot + "|" + t.Sequence] == t.SequenceIndex).ToList();
+        }
+
+        /// <summary>True for part 2+ of a multi-part song whose earlier part is in the same folder.</summary>
+        public bool IsContinuation(TrackInfo track)
+        {
+            if (track?.Sequence == null) return false;
+            if (!index.BySlot.TryGetValue(track.Slot, out var byPack) || !byPack.TryGetValue(track.Pack, out var list)) return false;
+            return list.Any(t => t.Sequence == track.Sequence && t.SequenceIndex < track.SequenceIndex);
+        }
+
+        /// <summary>The part that follows <paramref name="track"/> in its sequence (same pack and folder), or null.</summary>
+        public TrackInfo NextInSequence(TrackInfo track)
+        {
+            if (track?.Sequence == null) return null;
+            if (!index.BySlot.TryGetValue(track.Slot, out var byPack) || !byPack.TryGetValue(track.Pack, out var list)) return null;
+            TrackInfo next = null;
+            foreach (var t in list)
+            {
+                if (t.Sequence != track.Sequence || t.SequenceIndex <= track.SequenceIndex) continue;
+                lock (badFiles) if (badFiles.Contains(t.Path)) continue;
+                if (next == null || t.SequenceIndex < next.SequenceIndex) next = t;
+            }
+            return next;
         }
 
         public string PickBuildup()

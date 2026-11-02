@@ -14,6 +14,8 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE/plugins/CalamityMusic"
 cp Thunderstore/manifest.json Thunderstore/icon.png README.md CHANGELOG.md "$STAGE/"
 cp "$OUT/CalamityMusic.dll" "$OUT/NLayer.dll" "$OUT/NVorbis.dll" Thunderstore/icon.png "$STAGE/plugins/CalamityMusic/"
+mkdir -p "$STAGE/plugins/CalamityMusic/tools"
+cp tools/get_songs.py "tools/Get Calamity Songs.bat" "$STAGE/plugins/CalamityMusic/tools/"
 
 ZIP="dist/CalamityMusic-$VERSION.zip"
 rm -f "$ZIP"

@@ -55,6 +55,8 @@ namespace CalamityMusic.Audio
             public bool Finished;
             public bool EndingNotified;
             public int LastLoopCount;
+            public int FramesThisBlock;
+            public Voice Next; // gapless follow-up (next part of a multi-part song)
             public float[] Scratch = new float[FramesPerBuffer * 2];
         }
 
@@ -259,6 +261,24 @@ namespace CalamityMusic.Audio
                     }
                     break;
                 }
+                case TransitionKind.Append:
+                {
+                    // Start exactly when the current song ends (sample-accurate, no gap, no fade).
+                    Voice current = null;
+                    foreach (var other in voices)
+                        if (other.Kind == VoiceKind.Music && other.Started && !other.Finished && other.FadeStep >= 0 && other.Next == null)
+                            current = other;
+                    v.Fade = 1f;
+                    v.FadeStep = 0f;
+                    if (current != null) current.Next = v;
+                    else
+                    {
+                        v.Fade = 0f;
+                        v.FadeStep = 1f / (SampleRate * 0.01f);
+                        voices.Add(v);
+                    }
+                    break;
+                }
                 case TransitionKind.Crossfade:
                 {
                     FadeOutKinds(t.FadeSeconds, VoiceKind.Music, VoiceKind.Buildup);
@@ -320,10 +340,20 @@ namespace CalamityMusic.Audio
                 {
                     // A broken/locked file must not take the whole mixer down: drop just this voice.
                     v.Finished = true;
+                    v.FramesThisBlock = -1;
                     Log.Error("Playback error in " + (v.Info?.Path ?? v.Kind.ToString()) + ": " + e.Message);
                     Events.Enqueue(new EngineEvent { Kind = EngineEventKind.LoadFailed, VoiceId = v.Id, Track = v.Info, Message = e.Message });
                 }
                 if (v.Kind == VoiceKind.Music && !v.Finished && v.FadeStep >= 0 && v.Started) music = v.Id;
+
+                // Ran out naturally with a follow-up queued: hand over inside this same block.
+                if (v.Finished && v.Next != null && v.Track != null && v.Track.Ended && v.FramesThisBlock >= 0)
+                {
+                    var next = v.Next;
+                    v.Next = null;
+                    next.StartDelay = Math.Min(frames, v.FramesThisBlock);
+                    voices.Add(next); // mixed later in this loop
+                }
             }
             for (int i = voices.Count - 1; i >= 0; i--)
             {
@@ -331,6 +361,12 @@ namespace CalamityMusic.Audio
                 if (!v.Finished) continue;
                 if (v.Kind == VoiceKind.Music && v.Track != null && v.Track.Ended)
                     Events.Enqueue(new EngineEvent { Kind = EngineEventKind.TrackEnded, VoiceId = v.Id, Track = v.Info });
+                if (v.Next != null)
+                {
+                    // Faded out before reaching its end: the queued follow-up never plays.
+                    try { v.Next.Source.Dispose(); } catch { /* ignore */ }
+                    v.Next = null;
+                }
                 try { v.Source.Dispose(); } catch { /* already closed */ }
                 voices.RemoveAt(i);
             }
@@ -353,6 +389,7 @@ namespace CalamityMusic.Audio
 
         private void MixVoice(Voice v, int frames)
         {
+            v.FramesThisBlock = 0;
             int offset = 0;
             if (v.StartDelay > 0)
             {
@@ -378,6 +415,7 @@ namespace CalamityMusic.Audio
                 if (n <= 0) break;
                 got += n;
             }
+            v.FramesThisBlock = offset + got / 2;
             if (got < want)
             {
                 Array.Clear(v.Scratch, got, want - got);
@@ -512,6 +550,7 @@ namespace CalamityMusic.Audio
         FadeIn,
         Drop,
         Crossfade,
+        Append,
     }
 
     internal struct Transition
@@ -529,6 +568,9 @@ namespace CalamityMusic.Audio
 
         public static Transition FadeIn(float seconds) =>
             new Transition { Kind = TransitionKind.FadeIn, FadeSeconds = seconds };
+
+        /// <summary>Plays right after the current song ends, with no gap (for multi-part songs).</summary>
+        public static Transition Append() => new Transition { Kind = TransitionKind.Append };
     }
 
     /// <summary>Decodes the first chunk of a song ahead of time so the drop starts instantly.</summary>
