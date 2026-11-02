@@ -82,7 +82,7 @@ def make_env(home, fixtures):
 
 
 def main():
-    fixtures = sys.argv[1]
+    fixtures = os.path.abspath(sys.argv[1])
     home = tempfile.mkdtemp()
     make_env(home, fixtures)
     env = dict(os.environ, HOME=home, CALAMITY_NO_PAUSE="1")
