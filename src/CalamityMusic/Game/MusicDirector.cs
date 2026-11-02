@@ -50,6 +50,9 @@ namespace CalamityMusic.Game
         private int failedLoads;
         private bool warnedThisStage;
         private bool runOver;
+        private bool usingFileBuildup;
+        private bool holdStarted;
+        private float retryAfter;
 
         private readonly List<Sighting> alive = new List<Sighting>();
         private Sighting? dominant;
@@ -95,6 +98,7 @@ namespace CalamityMusic.Game
             escape = null;
             warnedThisStage = false;
             runOver = false;
+            retryAfter = 0f;
             failedLoads = 0;
             BossGroupTracker.Prune();
             library.RescanAsync();
@@ -102,38 +106,49 @@ namespace CalamityMusic.Game
 
         // ------------------------------------------------------------------ frame loop
 
+        private int frameErrors;
+
         private void Update()
         {
-            float now = Time.unscaledTime;
             float dt = Time.unscaledDeltaTime;
+            try
+            {
+                Frame(Time.unscaledTime, dt);
+            }
+            catch (Exception e)
+            {
+                if (frameErrors++ < 10) Log.Error("Music director error: " + e);
+            }
+            finally
+            {
+                // Always runs, so the game's music can never get stuck muted by an error above.
+                VanillaMusic.Update(dt);
+            }
+        }
 
+        private void Frame(float now, float dt)
+        {
             UpdateEngineSettings(dt);
             HandleEngineEvents(now);
 
             if (ModConfig.Mode.Value == MusicMode.Vanilla || !engine.Available)
             {
                 if (state != State.Idle) Stop(0.8f);
-                VanillaMusic.Update(dt);
                 return;
             }
 
             if (!Run.instance && kind != Kind.Preview && state != State.Idle) Stop(1.5f);
-            if (runOver && kind != Kind.Preview)
-            {
-                VanillaMusic.Update(dt);
-                return;
-            }
+            if (runOver && kind != Kind.Preview) return;
 
             scanTimer -= dt;
             if (scanTimer <= 0f)
             {
                 scanTimer = 0.2f;
-                ScanBosses();
+                ScanBosses(now);
             }
 
             if (Run.instance) WatchTeleporter(now);
             Tick(now);
-            VanillaMusic.Update(dt);
         }
 
         private void UpdateEngineSettings(float dt)
@@ -159,16 +174,18 @@ namespace CalamityMusic.Game
                 try { paused = PauseManager.isPaused || PauseManager.PauseScreenIsOpen(); }
                 catch { paused = PauseManager.isPaused; }
             }
-            engine.Muffle = paused ? 1f : 0f;
+            // Risk of Options is opened from the pause menu, so never muffle the Preview button.
+            engine.Muffle = paused && kind != Kind.Preview ? 1f : 0f;
         }
 
         // ------------------------------------------------------------------ boss detection
 
-        private void ScanBosses()
+        private void ScanBosses(float now)
         {
             alive.Clear();
             dominant = null;
             if (!Run.instance) return;
+            BossGroupTracker.RefreshIfUnpatched(now);
 
             if (!empyreanLookedUp)
             {
@@ -260,7 +277,7 @@ namespace CalamityMusic.Game
             switch (state)
             {
                 case State.Idle:
-                    if (dominant != null && Run.instance)
+                    if (dominant != null && Run.instance && now >= retryAfter)
                     {
                         var d = dominant.Value;
                         var tp = TeleporterInteraction.instance;
@@ -288,6 +305,12 @@ namespace CalamityMusic.Game
                     float t = now - stateStart;
                     if (t >= buildupLength && pendingTheme != null) Drop(pendingTheme, now);
                     else if (t >= buildupLength + 8f) Drop(themes.Generic(), now); // the boss never turned up
+                    else if (t >= buildupLength && usingFileBuildup && !holdStarted)
+                    {
+                        // The custom buildup ran out before the boss showed up: hold the tension with the synth.
+                        holdStarted = true;
+                        engine.StartBuildup(new BuildupSynth(buildupLength, rng.Next(), true));
+                    }
                     break;
                 }
 
@@ -391,27 +414,14 @@ namespace CalamityMusic.Game
         private void StartBuildup(float now)
         {
             buildupLength = Mathf.Clamp(ModConfig.BuildupLength.Value, 1.5f, 15f);
-            ISampleSource source = null;
+            holdStarted = false;
 
             var style = ModConfig.Buildup.Value;
             string file = style == BuildupStyle.Synth ? null : library.PickBuildup();
-            bool useFile = file != null && (style == BuildupStyle.CustomFiles || rng.Next(2) == 0);
-            if (useFile)
-            {
-                try
-                {
-                    var reader = new TrackReader(AudioDecoder.Open(file), 0, 0, 0f, false);
-                    if (reader.LengthSeconds > 0.5) buildupLength = Mathf.Clamp((float)reader.LengthSeconds - 0.05f, 1.5f, 20f);
-                    source = reader;
-                }
-                catch (Exception e)
-                {
-                    Log.Warning("Could not open buildup " + file + ": " + e.Message);
-                }
-            }
-            if (source == null) source = new BuildupSynth(buildupLength, rng.Next());
+            usingFileBuildup = file != null && (style == BuildupStyle.CustomFiles || rng.Next(2) == 0);
+            if (usingFileBuildup) engine.StartBuildupFile(file); // length arrives with BuildupReady
+            else engine.StartBuildup(new BuildupSynth(buildupLength, rng.Next()));
 
-            engine.StartBuildup(source);
             VanillaMusic.FadeOut();
             state = State.Buildup;
             stateStart = now;
@@ -441,7 +451,11 @@ namespace CalamityMusic.Game
         {
             if (t.KeepVanilla || LibraryEmpty()) return;
             var track = PickFor(t, null);
-            if (track == null) return;
+            if (track == null)
+            {
+                retryAfter = now + 5f; // nothing to play for this boss; don't re-search every frame
+                return;
+            }
 
             failedLoads = 0;
             VanillaMusic.FadeOut();
@@ -487,7 +501,7 @@ namespace CalamityMusic.Game
             {
                 escapeSearchTimer -= Time.unscaledDeltaTime;
                 if (escapeSearchTimer > 0f) return false;
-                escapeSearchTimer = 1f;
+                escapeSearchTimer = 3f;
                 escape = FindObjectOfType<EscapeSequenceController>();
                 if (!escape) return false;
             }
@@ -536,9 +550,30 @@ namespace CalamityMusic.Game
                         if (state == State.Playing && engine.ActiveMusicVoice == 0) PlayNext(Transition.FadeIn(0.3f));
                         break;
 
+                    case EngineEventKind.BuildupReady:
+                        if (state == State.Buildup && usingFileBuildup && e.Seconds > 0.5)
+                            buildupLength = Mathf.Clamp((float)e.Seconds - 0.05f, 1.5f, 20f);
+                        break;
+
+                    case EngineEventKind.BuildupFailed:
+                        Log.Warning("Could not play buildup " + e.Message);
+                        if (state == State.Buildup && usingFileBuildup)
+                        {
+                            usingFileBuildup = false;
+                            engine.StartBuildup(new BuildupSynth(Mathf.Max(1.5f, buildupLength - (now - stateStart)), rng.Next()));
+                            buildupLength = Mathf.Max(now - stateStart + 1.5f, buildupLength);
+                        }
+                        break;
+
                     case EngineEventKind.LoadFailed:
-                        Log.Warning($"Could not play '{e.Track?.Path}': {e.Message}");
-                        if (e.Track != null) library.MarkBad(e.Track);
+                        if (e.Track == null)
+                        {
+                            // A buildup file broke mid-way; the hold synth covers it if the boss is late.
+                            Log.Warning("Buildup playback stopped: " + e.Message);
+                            break;
+                        }
+                        Log.Warning($"Could not play '{e.Track.Path}': {e.Message}");
+                        library.MarkBad(e.Track);
                         if (state == State.Playing && failedLoads++ < 3)
                             PlayNext(Transition.Drop(0f, 0.02f));
                         else if (state == State.Playing)

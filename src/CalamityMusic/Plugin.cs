@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using BepInEx;
 using BepInEx.Bootstrap;
 using BepInEx.Logging;
@@ -52,8 +53,7 @@ namespace CalamityMusic
 
             themes = new BossThemes(Paths.ConfigPath);
 
-            harmony = new Harmony(Guid);
-            harmony.PatchAll(typeof(CalamityMusicPlugin).Assembly);
+            ApplyPatches();
 
             engine = new MusicEngine();
             engine.Start();
@@ -68,6 +68,46 @@ namespace CalamityMusic
             if (Chainloader.PluginInfos.ContainsKey(Starstorm2Guid))
                 Log.Info("Starstorm 2 detected: Wayfarer, Nemesis and Empyrean fights have Calamity themes.");
             Log.Info("Music folder: " + library.Root);
+        }
+
+        /// <summary>
+        /// Patches class by class so one failure (after a game update, say) doesn't take the rest down,
+        /// then switches off whatever depends on a patch that didn't apply.
+        /// </summary>
+        private void ApplyPatches()
+        {
+            harmony = new Harmony(Guid);
+            foreach (var type in AccessTools.GetTypesFromAssembly(typeof(CalamityMusicPlugin).Assembly))
+            {
+                if (type.GetCustomAttributes(typeof(HarmonyPatch), false).Length == 0 &&
+                    !type.GetMethods(AccessTools.all).Any(m => m.GetCustomAttributes(typeof(HarmonyPatch), false).Length > 0))
+                    continue;
+                try
+                {
+                    harmony.CreateClassProcessor(type).Patch();
+                }
+                catch (Exception e)
+                {
+                    Log.Error("Patch " + type.Name + " failed: " + e.Message);
+                }
+            }
+
+            bool volumePatched = IsPatched(AccessTools.Method(typeof(RoR2.AudioManager.VolumeConVar), nameof(RoR2.AudioManager.VolumeConVar.GetString)))
+                                 && IsPatched(AccessTools.Method(typeof(RoR2.AudioManager.VolumeConVar), nameof(RoR2.AudioManager.VolumeConVar.SetString)));
+            VanillaMusic.Enabled = volumePatched;
+            if (!volumePatched)
+                Log.Warning("Music volume patches did not apply, so the game's own music will keep playing underneath.");
+
+            BossGroupTracker.Patched = IsPatched(AccessTools.Method(typeof(RoR2.BossGroup), nameof(RoR2.BossGroup.Awake)));
+            if (!BossGroupTracker.Patched)
+                Log.Warning("BossGroup patch did not apply; falling back to scanning for boss groups.");
+        }
+
+        private static bool IsPatched(System.Reflection.MethodBase method)
+        {
+            if (method == null) return false;
+            var info = Harmony.GetPatchInfo(method);
+            return info != null && (info.Prefixes.Any(p => p.owner == Guid) || info.Postfixes.Any(p => p.owner == Guid));
         }
 
         private void SetupSettingsMenu()

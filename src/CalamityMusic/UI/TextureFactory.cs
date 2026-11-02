@@ -95,7 +95,7 @@ namespace CalamityMusic.UI
                 }
             }
             tex.SetPixels(px);
-            tex.Apply(false, true);
+            tex.Apply(true, true);
             return tex;
         }
 
@@ -115,7 +115,7 @@ namespace CalamityMusic.UI
                 }
             }
             tex.SetPixels(px);
-            tex.Apply(false, true);
+            tex.Apply(true, true);
             return tex;
         }
 

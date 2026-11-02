@@ -36,13 +36,19 @@ namespace CalamityMusic.Audio
         public int SampleRate => MusicEngine.SampleRate;
         public int Channels => 2;
 
-        public BuildupSynth(float lengthSeconds, int seed)
+        /// <param name="startHolding">Skip the build and go straight to the sustained hold (used when a custom buildup file ran out before the boss appeared).</param>
+        public BuildupSynth(float lengthSeconds, int seed, bool startHolding = false)
         {
             length = Math.Max(1.5f, lengthSeconds);
             beat = length / 8f;
             rng ^= (uint)seed * 2654435761u;
             var r = new Random(seed);
             for (int i = 0; i < sawPhase.Length; i++) sawPhase[i] = r.NextDouble();
+            if (startHolding)
+            {
+                frame = (long)(length * SR);
+                nextHitBeat = 8.0;
+            }
         }
 
         private float Noise()
@@ -200,8 +206,8 @@ namespace CalamityMusic.Audio
                 float l = mono + nl + syl + snareSideL + dread;
                 float r = mono + nr + syr + snareSideR + dread;
 
-                // Fade in over the first 150 ms so it never starts with a click.
-                float fadeIn = Math.Min(1f, t / 0.15f);
+                // Fade in over the first 150 ms so it never starts with a click (the engine fades held starts).
+                float fadeIn = holding ? 1f : Math.Min(1f, t / 0.15f);
                 buffer[o++] = (float)Math.Tanh(l * 1.15f) * 0.9f * fadeIn;
                 buffer[o++] = (float)Math.Tanh(r * 1.15f) * 0.9f * fadeIn;
             }

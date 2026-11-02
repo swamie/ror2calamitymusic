@@ -191,10 +191,10 @@ namespace CalamityMusic.Library
 
         private static void Guess(string bodyName, string displayName, out string slots, out int priority)
         {
-            string hay = (bodyName + " " + displayName).ToLowerInvariant().Replace(" ", "");
+            var words = WordStarts(bodyName + " " + displayName);
             foreach (var k in Keywords)
             {
-                if (k.words.Any(w => hay.Contains(w)))
+                if (k.words.Any(w => words.Any(s => s.StartsWith(w, StringComparison.Ordinal))))
                 {
                     slots = k.slots;
                     priority = k.priority;
@@ -203,6 +203,35 @@ namespace CalamityMusic.Library
             }
             slots = Library.Slots.Generic;
             priority = Horde;
+        }
+
+        /// <summary>
+        /// Splits "MiniVoidRaidCrabBody Elder Lemurian" into words and returns the lowercase text from
+        /// the start of each word to the end ("minivoidraidcrabbody...", "voidraidcrabbody...", ...).
+        /// Keywords must match at a word start, so "nem" hits "NemCommando" but not "Enemy",
+        /// while multi-word keywords like "voidraid" still work.
+        /// </summary>
+        private static List<string> WordStarts(string name)
+        {
+            var starts = new List<int>();
+            var sb = new System.Text.StringBuilder();
+            char prev = ' ';
+            foreach (char c in name ?? "")
+            {
+                if (!char.IsLetterOrDigit(c))
+                {
+                    prev = ' ';
+                    continue;
+                }
+                bool boundary = !char.IsLetterOrDigit(prev)
+                    || (char.IsUpper(c) && char.IsLower(prev))
+                    || (char.IsDigit(c) != char.IsDigit(prev));
+                if (boundary) starts.Add(sb.Length);
+                sb.Append(char.ToLowerInvariant(c));
+                prev = c;
+            }
+            string all = sb.ToString();
+            return starts.Select(i => all.Substring(i)).ToList();
         }
 
         private static string SanitizeKey(string key)

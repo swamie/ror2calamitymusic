@@ -42,6 +42,7 @@ namespace CalamityMusic.Library
         private readonly System.Random rng = new System.Random();
         private volatile Index index = new Index();
         private int scanning;
+        private volatile bool rescanQueued;
 
         public string Root { get; }
         public int TrackCount => index.All.Count;
@@ -135,12 +136,26 @@ namespace CalamityMusic.Library
 
         public void RescanAsync()
         {
-            if (Interlocked.Exchange(ref scanning, 1) == 1) return;
+            rescanQueued = true;
+            if (Interlocked.Exchange(ref scanning, 1) == 1) return; // the running scan will pick the request up
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                try { Rescan(); }
-                catch (Exception e) { Log.Error("Music folder scan failed: " + e); }
-                finally { Interlocked.Exchange(ref scanning, 0); }
+                try
+                {
+                    while (rescanQueued)
+                    {
+                        rescanQueued = false;
+                        Rescan();
+                    }
+                }
+                catch (Exception e)
+                {
+                    Log.Error("Music folder scan failed: " + e);
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref scanning, 0);
+                }
             });
         }
 
@@ -169,6 +184,7 @@ namespace CalamityMusic.Library
                 }
             }
             index = next;
+            lock (badFiles) badFiles.Clear(); // give files that failed (locked, mid-download) another chance
             Log.Info($"Music library: {next.All.Count} song(s) in {next.BySlot.Count} theme folder(s), {next.Buildups.Count} custom buildup(s).");
         }
 

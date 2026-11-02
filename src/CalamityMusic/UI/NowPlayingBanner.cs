@@ -10,6 +10,10 @@ namespace CalamityMusic.UI
     /// The "♫ Artist - Title" banner. Styled after the Calamity/Infernum music display: white
     /// lettering with a thick royal-blue outline and a teal glow, plus a matching music-note icon.
     /// Slides and fades in, pulses with the bass while it is up, then slides out.
+    ///
+    /// The outline and glow are stacked copies of the text with their glyphs dilated (fattened) in
+    /// the distance field. That only uses base SDF shader properties, so it renders even if the
+    /// game build stripped TextMeshPro's optional outline/underlay shader variants.
     /// </summary>
     internal sealed class NowPlayingBanner : MonoBehaviour
     {
@@ -22,16 +26,26 @@ namespace CalamityMusic.UI
         private const float InTime = 0.55f;
         private const float OutTime = 0.5f;
         private const float FontSize = 38f;
+        private const float HintFontSize = 26f;
         private const float IconSize = 58f;
-        private const float Gap = 10f;
+        private const float Gap = 12f;
+
+        private sealed class TextLayer
+        {
+            public RectTransform Rect;
+            public TextMeshProUGUI Text;
+            public Material Material;
+            public float Dilate, Softness;
+            public Color Color;
+        }
 
         private Func<float> bassLevel;
         private Canvas canvas;
-        private RectTransform root, content, textRect, iconRect, auraRect, backRect, lineRect;
+        private RectTransform root, content, textRoot, iconRect, auraRect, backRect, lineRect;
         private CanvasGroup group;
-        private TextMeshProUGUI text;
+        private TextLayer glowLayer, outlineLayer, faceLayer;
         private RawImage icon, aura, back, line;
-        private Material textMaterial;
+        private TMP_FontAsset builtFont;
 
         private Phase phase = Phase.Hidden;
         private float phaseTime;
@@ -58,20 +72,28 @@ namespace CalamityMusic.UI
         private void Enqueue(string message, bool hint)
         {
             if (string.IsNullOrEmpty(message)) return;
-            // Built on first use: the game's font isn't loaded yet when plugins start.
-            if (canvas == null && !TryBuild()) return;
-            if (phase == Phase.Hidden)
+            try
             {
-                Begin(message, hint);
-                return;
+                // Built on first use: the game's font isn't loaded yet when plugins start.
+                if (canvas == null && !TryBuild()) return;
+                if (phase == Phase.Hidden)
+                {
+                    Begin(message, hint);
+                    return;
+                }
+                // Something is already showing: slide it out quickly, then show the new one.
+                queuedText = message;
+                queuedHint = hint;
+                if (phase != Phase.Out)
+                {
+                    phase = Phase.Out;
+                    phaseTime = OutTime * 0.5f;
+                }
             }
-            // Something is already showing: slide it out quickly, then show the new one.
-            queuedText = message;
-            queuedHint = hint;
-            if (phase != Phase.Out)
+            catch (Exception e)
             {
-                phase = Phase.Out;
-                phaseTime = 0.25f;
+                Log.Error("Now Playing banner failed: " + e);
+                phase = Phase.Hidden;
             }
         }
 
@@ -87,8 +109,7 @@ namespace CalamityMusic.UI
             catch (Exception e)
             {
                 Log.Error("Could not build the Now Playing banner: " + e);
-                if (canvas) Destroy(canvas.gameObject);
-                canvas = null;
+                Teardown();
                 return false;
             }
         }
@@ -115,6 +136,7 @@ namespace CalamityMusic.UI
             canvas = go.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 500;
+            canvas.enabled = false;
             var scaler = go.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
@@ -154,25 +176,53 @@ namespace CalamityMusic.UI
             icon.raycastTarget = false;
             iconRect.sizeDelta = new Vector2(IconSize, IconSize);
 
-            textRect = NewRect("Text", content);
-            text = textRect.gameObject.AddComponent<TextMeshProUGUI>();
-            var font = FindFont();
-            if (font) text.font = font;
-            text.fontSize = FontSize;
-            text.enableWordWrapping = false;
-            text.overflowMode = TextOverflowModes.Overflow;
-            text.alignment = TextAlignmentOptions.MidlineLeft;
-            text.characterSpacing = 2f;
-            text.raycastTarget = false;
-            text.color = Color.white;
-            if (text.font)
-            {
-                textMaterial = new Material(text.font.material);
-                StyleMaterial(textMaterial);
-                text.fontSharedMaterial = textMaterial;
-            }
+            textRoot = NewRect("Text", content);
+            glowLayer = NewLayer("Glow", new Color(Glow.r, Glow.g, Glow.b, 0.85f), 0.82f, 0.55f);
+            outlineLayer = NewLayer("Outline", Outline, 0.42f, 0.04f);
+            faceLayer = NewLayer("Face", Fill, 0.06f, 0f);
+            ApplyFont(FindFont());
 
             ApplyPosition(true);
+        }
+
+        private TextLayer NewLayer(string name, Color color, float dilate, float softness)
+        {
+            var rt = NewRect(name, textRoot);
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            var t = rt.gameObject.AddComponent<TextMeshProUGUI>();
+            t.fontSize = FontSize;
+            t.enableWordWrapping = false;
+            t.overflowMode = TextOverflowModes.Overflow;
+            t.alignment = TextAlignmentOptions.MidlineLeft;
+            t.characterSpacing = 2f;
+            t.richText = false; // song titles can contain '<'
+            t.raycastTarget = false;
+            t.extraPadding = true;
+            t.color = color;
+            return new TextLayer { Rect = rt, Text = t, Color = color, Dilate = dilate, Softness = softness };
+        }
+
+        private void ApplyFont(TMP_FontAsset font)
+        {
+            if (!font) return;
+            builtFont = font;
+            foreach (var layer in new[] { glowLayer, outlineLayer, faceLayer })
+            {
+                layer.Text.font = font;
+                if (layer.Material) Destroy(layer.Material);
+                layer.Material = new Material(font.material);
+                var m = layer.Material;
+                if (m.HasProperty("_FaceColor")) m.SetColor("_FaceColor", Color.white); // tinted per layer by vertex color
+                if (m.HasProperty("_OutlineWidth")) m.SetFloat("_OutlineWidth", 0f);
+                if (m.HasProperty("_FaceDilate")) m.SetFloat("_FaceDilate", layer.Dilate);
+                if (m.HasProperty("_OutlineSoftness")) m.SetFloat("_OutlineSoftness", layer.Softness);
+                m.DisableKeyword("UNDERLAY_ON");
+                m.DisableKeyword("GLOW_ON");
+                layer.Text.fontSharedMaterial = m;
+                layer.Text.UpdateMeshPadding();
+            }
         }
 
         private static RectTransform NewRect(string name, Transform parent)
@@ -183,21 +233,6 @@ namespace CalamityMusic.UI
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
             return rt;
-        }
-
-        private static void StyleMaterial(Material m)
-        {
-            m.SetColor("_FaceColor", Fill);
-            m.SetColor("_OutlineColor", Outline);
-            m.SetFloat("_OutlineWidth", 0.24f);
-            m.SetFloat("_FaceDilate", 0.08f);
-            // Soft teal underlay = the outer glow ring from the reference image.
-            m.EnableKeyword("UNDERLAY_ON");
-            m.SetColor("_UnderlayColor", new Color(Glow.r, Glow.g, Glow.b, 0.9f));
-            m.SetFloat("_UnderlayOffsetX", 0f);
-            m.SetFloat("_UnderlayOffsetY", 0f);
-            m.SetFloat("_UnderlayDilate", 0.75f);
-            m.SetFloat("_UnderlaySoftness", 0.5f);
         }
 
         private void ApplyPosition(bool force)
@@ -229,19 +264,19 @@ namespace CalamityMusic.UI
         private void Begin(string message, bool hint)
         {
             currentHint = hint;
-            if (HGTextMeshProUGUI.defaultLanguageFont && text.font != HGTextMeshProUGUI.defaultLanguageFont)
+            // The language (and so the font) may have changed since the banner was built.
+            if (HGTextMeshProUGUI.defaultLanguageFont && builtFont != HGTextMeshProUGUI.defaultLanguageFont)
+                ApplyFont(HGTextMeshProUGUI.defaultLanguageFont);
+
+            float size = hint ? HintFontSize : FontSize;
+            foreach (var layer in new[] { glowLayer, outlineLayer, faceLayer })
             {
-                // Language (and so font) changed since the banner was built.
-                text.font = HGTextMeshProUGUI.defaultLanguageFont;
-                textMaterial = new Material(text.font.material);
-                StyleMaterial(textMaterial);
-                text.fontSharedMaterial = textMaterial;
+                layer.Text.text = message;
+                layer.Text.fontSize = size;
             }
-            text.text = message;
-            text.fontSize = hint ? 26f : FontSize;
-            text.ForceMeshUpdate();
-            float textWidth = Mathf.Max(40f, text.preferredWidth);
-            float textHeight = (hint ? 26f : FontSize) * 1.35f;
+            faceLayer.Text.ForceMeshUpdate();
+            float textWidth = Mathf.Max(40f, faceLayer.Text.preferredWidth);
+            float textHeight = size * 1.35f;
             float iconSize = hint ? 40f : IconSize;
 
             float width = iconSize + Gap + textWidth;
@@ -250,13 +285,13 @@ namespace CalamityMusic.UI
 
             iconRect.sizeDelta = new Vector2(iconSize, iconSize);
             iconRect.anchoredPosition = new Vector2(-width / 2f + iconSize / 2f, 2f);
-            textRect.sizeDelta = new Vector2(textWidth + 4f, textHeight);
-            textRect.anchoredPosition = new Vector2(-width / 2f + iconSize + Gap + textWidth / 2f, 0f);
+            textRoot.sizeDelta = new Vector2(textWidth + 4f, textHeight);
+            textRoot.anchoredPosition = new Vector2(-width / 2f + iconSize + Gap + textWidth / 2f, 0f);
 
             backRect.sizeDelta = new Vector2(width + 160f, height + 44f);
             auraRect.sizeDelta = new Vector2(width + 90f, height + 26f);
             lineRect.sizeDelta = new Vector2(width + 30f, 6f);
-            lineRect.anchoredPosition = new Vector2(0f, -height / 2f - 4f);
+            lineRect.anchoredPosition = new Vector2(0f, -height / 2f - 6f);
 
             holdTime = hint ? 7f : Mathf.Max(1f, ModConfig.NowPlayingSeconds.Value);
             phase = Phase.In;
@@ -269,6 +304,20 @@ namespace CalamityMusic.UI
         private void Update()
         {
             if (canvas == null) return;
+            try
+            {
+                Animate();
+            }
+            catch (Exception e)
+            {
+                Log.Error("Now Playing banner failed: " + e);
+                phase = Phase.Hidden;
+                canvas.enabled = false;
+            }
+        }
+
+        private void Animate()
+        {
             ApplyPosition(false);
 
             bool hudOn = HUD.cvHudEnable == null || HUD.cvHudEnable.value;
@@ -309,6 +358,7 @@ namespace CalamityMusic.UI
                     {
                         phase = Phase.Hidden;
                         group.alpha = 0f;
+                        canvas.enabled = false;
                         if (queuedText != null)
                         {
                             string q = queuedText;
@@ -323,8 +373,7 @@ namespace CalamityMusic.UI
 
             group.alpha = alpha;
             content.anchoredPosition = new Vector2(x, 0f);
-            float bump = 1f + 0.035f * pulse;
-            content.localScale = Vector3.one * scale * bump;
+            content.localScale = Vector3.one * scale * (1f + 0.035f * pulse);
             root.localScale = Vector3.one * Mathf.Clamp(ModConfig.NowPlayingScale.Value / 100f, 0.3f, 3f);
 
             float glow = Mathf.Clamp01(0.22f + 0.45f * pulse + 0.6f * flash);
@@ -332,12 +381,7 @@ namespace CalamityMusic.UI
             line.color = new Color(Glow.r, Glow.g, Glow.b, 0.75f + 0.25f * pulse);
             lineRect.localScale = new Vector3(lineFill, 1f, 1f);
             iconRect.localScale = Vector3.one * (1f + 0.07f * pulse + 0.1f * flash);
-
-            if (textMaterial)
-            {
-                textMaterial.SetFloat("_UnderlayDilate", 0.6f + 0.35f * pulse + 0.4f * flash);
-                textMaterial.SetColor("_UnderlayColor", new Color(Glow.r, Glow.g, Glow.b, Mathf.Clamp01(0.75f + 0.25f * pulse + flash)));
-            }
+            glowLayer.Text.color = new Color(Glow.r, Glow.g, Glow.b, Mathf.Clamp01(0.6f + 0.4f * pulse + flash));
         }
 
         private static float EaseOutCubic(float t) => 1f - Mathf.Pow(1f - t, 3f);
@@ -348,5 +392,15 @@ namespace CalamityMusic.UI
             const float c1 = 1.70158f, c3 = c1 + 1f;
             return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
         }
+
+        private void Teardown()
+        {
+            foreach (var layer in new[] { glowLayer, outlineLayer, faceLayer })
+                if (layer?.Material) Destroy(layer.Material);
+            if (canvas) Destroy(canvas.gameObject);
+            canvas = null;
+        }
+
+        private void OnDestroy() => Teardown();
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using CalamityMusic.Library;
 
@@ -12,6 +13,8 @@ namespace CalamityMusic.Audio
         TrackEnding,
         TrackEnded,
         LoadFailed,
+        BuildupReady,
+        BuildupFailed,
     }
 
     internal struct EngineEvent
@@ -20,6 +23,7 @@ namespace CalamityMusic.Audio
         public int VoiceId;
         public TrackInfo Track;
         public string Message;
+        public double Seconds;
     }
 
     /// <summary>
@@ -84,7 +88,9 @@ namespace CalamityMusic.Audio
         private volatile int activeMusicVoice;
         private volatile bool anythingPlaying;
 
-        public bool Available { get; private set; }
+        private bool started;
+
+        public bool Available => started && player.Healthy;
         public float BassLevel => bassLevel;
         public float Level => level;
         public bool AnythingPlaying => anythingPlaying;
@@ -105,11 +111,11 @@ namespace CalamityMusic.Audio
             try
             {
                 player.Start();
-                Available = true;
+                started = true;
             }
             catch (Exception e)
             {
-                Available = false;
+                started = false;
                 Log.Error("Could not open an audio output device, Calamity music is disabled: " + e.Message);
             }
         }
@@ -129,6 +135,44 @@ namespace CalamityMusic.Audio
             });
         }
 
+        /// <summary>
+        /// Starts a custom buildup file. It is opened in the background (an MP3's length can take a
+        /// moment to work out); BuildupReady reports its length, BuildupFailed means use the synth.
+        /// </summary>
+        public void StartBuildupFile(string path)
+        {
+            int gen = Interlocked.Increment(ref generation);
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                TrackReader reader;
+                try
+                {
+                    reader = new TrackReader(AudioDecoder.Open(path), 0, 0, 0f, false);
+                }
+                catch (Exception e)
+                {
+                    if (gen == Volatile.Read(ref generation))
+                        Events.Enqueue(new EngineEvent { Kind = EngineEventKind.BuildupFailed, Message = path + ": " + e.Message });
+                    return;
+                }
+                double length = reader.LengthSeconds;
+                var source = new PrebufferedSource(PrepareSource(reader), SampleRate / 4);
+                commands.Enqueue(() =>
+                {
+                    if (gen != Volatile.Read(ref generation))
+                    {
+                        source.Dispose();
+                        return;
+                    }
+                    FadeOutKinds(0.35f, VoiceKind.Music, VoiceKind.Buildup);
+                    var v = NewVoice(VoiceKind.Buildup, source);
+                    v.FadeStep = 1f / (SampleRate * 0.05f);
+                    voices.Add(v);
+                    Events.Enqueue(new EngineEvent { Kind = EngineEventKind.BuildupReady, Seconds = length });
+                });
+            });
+        }
+
         /// <summary>Opens a song file in the background and schedules the given transition once it is ready.</summary>
         public void Play(TrackInfo track, bool loop, Transition transition)
         {
@@ -142,7 +186,9 @@ namespace CalamityMusic.Audio
                 }
                 catch (Exception e)
                 {
-                    Events.Enqueue(new EngineEvent { Kind = EngineEventKind.LoadFailed, Track = track, Message = e.Message });
+                    // A load that was superseded in the meantime doesn't matter any more.
+                    if (gen == Volatile.Read(ref generation))
+                        Events.Enqueue(new EngineEvent { Kind = EngineEventKind.LoadFailed, Track = track, Message = e.Message });
                     return;
                 }
 
@@ -180,6 +226,12 @@ namespace CalamityMusic.Audio
         private Voice OpenTrack(TrackInfo info, bool loop)
         {
             var file = AudioDecoder.Open(info.Path);
+            if (file.LengthSeconds < 1.0)
+            {
+                // Usually a broken download or a web page saved with a .mp3 name.
+                file.Dispose();
+                throw new InvalidDataException($"only {file.LengthSeconds:0.00}s of audio, not a usable song");
+            }
             var reader = new TrackReader(file, info.StartSeconds, info.LoopStartSeconds, info.GainDb, loop);
             var source = new PrebufferedSource(PrepareSource(reader), SampleRate / 4);
             return new Voice { Id = Interlocked.Increment(ref nextVoiceId), Kind = VoiceKind.Music, Source = source, Track = reader, Info = info };
@@ -260,7 +312,17 @@ namespace CalamityMusic.Audio
             for (int i = 0; i < voices.Count; i++)
             {
                 var v = voices[i];
-                MixVoice(v, frames);
+                try
+                {
+                    MixVoice(v, frames);
+                }
+                catch (Exception e)
+                {
+                    // A broken/locked file must not take the whole mixer down: drop just this voice.
+                    v.Finished = true;
+                    Log.Error("Playback error in " + (v.Info?.Path ?? v.Kind.ToString()) + ": " + e.Message);
+                    Events.Enqueue(new EngineEvent { Kind = EngineEventKind.LoadFailed, VoiceId = v.Id, Track = v.Info, Message = e.Message });
+                }
                 if (v.Kind == VoiceKind.Music && !v.Finished && v.FadeStep >= 0 && v.Started) music = v.Id;
             }
             for (int i = voices.Count - 1; i >= 0; i--)
@@ -436,7 +498,7 @@ namespace CalamityMusic.Audio
 
         public void Dispose()
         {
-            player.Dispose();
+            if (!player.Stop()) return; // audio thread still busy; don't touch its voices
             foreach (var v in voices)
             {
                 try { v.Source.Dispose(); } catch { /* ignore */ }

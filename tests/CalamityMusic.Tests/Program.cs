@@ -65,6 +65,8 @@ namespace CalamityMusic.Tests
             Run("Bass boost", BassBoost);
             Run("Crossfade and stop", CrossfadeStop);
             Run("Song end events", SongEnd);
+            Run("Broken files don't break the mixer", BrokenFiles);
+            Run("Custom buildup files", CustomBuildup);
             Run("Library folders and picking", LibraryTest);
             Run("Boss theme mapping", ThemesTest);
 
@@ -341,6 +343,68 @@ namespace CalamityMusic.Tests
             Check(ended.e.Kind == EngineEventKind.TrackEnded && ended.time > 7.9, $"TrackEnded at the end ({ended.time:0.00}s)");
         }
 
+        private static void BrokenFiles()
+        {
+            // Half of a real OGG followed by junk: decodes fine for a while, then fails mid-stream.
+            byte[] good = File.ReadAllBytes(OggPath);
+            byte[] bad = new byte[good.Length];
+            Array.Copy(good, bad, good.Length / 3);
+            new Random(5).NextBytes(new Span<byte>(bad, good.Length / 3, bad.Length - good.Length / 3));
+            for (int i = good.Length / 3; i + 4 < bad.Length; i += 4096) { bad[i] = (byte)'O'; bad[i + 1] = (byte)'g'; bad[i + 2] = (byte)'g'; bad[i + 3] = (byte)'S'; }
+            string corrupt = Path.Combine(outDir, "Broken - Corrupt Song.ogg");
+            File.WriteAllBytes(corrupt, bad);
+            string garbage = Path.Combine(outDir, "Broken - Garbage.mp3");
+            var junk = new byte[50000];
+            new Random(9).NextBytes(junk);
+            File.WriteAllBytes(garbage, junk);
+
+            var engine = new MusicEngine { Volume = 1f };
+            var rec = new Recorder(engine);
+            engine.StartBuildup(new BuildupSynth(3f, 1));
+            rec.Render(0.5);
+            engine.Play(TrackInfo.FromFile(garbage, "Calamity", "X"), true, Transition.Crossfade(0.2f));
+            rec.WaitForLoad();
+            rec.Render(0.5);
+            Check(rec.Rms(0.6, 1.0) > 0.001, "buildup keeps playing when a garbage file fails to load");
+            Check(rec.Events.Any(e => e.e.Kind == EngineEventKind.LoadFailed), "garbage file is rejected with LoadFailed");
+
+            engine.Play(TrackInfo.FromFile(corrupt, "Calamity", "X"), false, Transition.Crossfade(0.2f));
+            rec.WaitForLoad();
+            rec.Render(6.0);
+            Check(rec.Samples.All(f => !float.IsNaN(f)), "no NaN from a corrupt stream");
+            Check(rec.Events.Any(e => e.e.Kind == EngineEventKind.TrackEnded || e.e.Kind == EngineEventKind.LoadFailed),
+                "corrupt stream ends or reports failure: " + string.Join(", ", rec.Events.Select(e => e.e.Kind + (e.e.Message != null ? "(" + e.e.Message + ")" : ""))));
+
+            // The mixer must still work afterwards.
+            engine.Play(TrackInfo.FromFile(F("base.wav"), "Calamity", "A"), true, Transition.FadeIn(0.05f));
+            rec.WaitForLoad();
+            rec.Render(2.0);
+            Check(rec.Rms(rec.Time - 1.0, rec.Time) > 0.05, "mixer still plays the next song");
+        }
+
+        private static void CustomBuildup()
+        {
+            var engine = new MusicEngine { Volume = 1f };
+            var rec = new Recorder(engine);
+            engine.StartBuildupFile(F("base.wav"));
+            rec.WaitForLoad();
+            rec.Render(2.0);
+            var ready = rec.Events.FirstOrDefault(e => e.e.Kind == EngineEventKind.BuildupReady);
+            Check(ready.e.Kind == EngineEventKind.BuildupReady && Math.Abs(ready.e.Seconds - 8.0) < 0.01, $"BuildupReady reports the file length ({ready.e.Seconds:0.00}s)");
+            Check(rec.Rms(1.2, 2.0) > 0.05, "custom buildup plays");
+
+            engine.StartBuildupFile(Path.Combine(outDir, "does_not_exist.ogg"));
+            rec.WaitForLoad();
+            rec.Render(0.2);
+            Check(rec.Events.Any(e => e.e.Kind == EngineEventKind.BuildupFailed), "missing buildup file reports BuildupFailed");
+
+            var held = new BuildupSynth(4f, 3, true);
+            var buf = new float[SR];
+            held.Read(buf, 0, buf.Length);
+            double rms = Math.Sqrt(buf.Skip(SR / 2).Select(v => (double)v * v).Average());
+            Check(rms > 0.05, $"hold-only synth starts at full tension (rms {rms:0.000})");
+        }
+
         private static void LibraryTest()
         {
             string root = Path.Combine(outDir, "lib", "Music");
@@ -408,6 +472,9 @@ namespace CalamityMusic.Tests
             Check(heart.Slots[0] == "ExoMechs" && heart.IsFinale, "new DLC final boss guessed as Exo Mechs finale");
             Check(themes.Resolve("ProvidenceBody", "Providence").Slots[0] == "Providence", "Providence -> Providence");
             Check(themes.Resolve("GnorpBody", "Gnorp").Slots[0] == Slots.Generic, "nameless modded boss -> Generic");
+            Check(themes.Resolve("EnemyGuyBody", null).Slots[0] == Slots.Generic, "'nem' doesn't match inside 'Enemy'");
+            Check(themes.Resolve("PoliceBody", null).Slots[0] == Slots.Generic, "'ice' doesn't match inside 'Police'");
+            Check(themes.Resolve("MiniVoidRaidCrabBodyPhase4", null).IsFinale, "multi-word keyword (voidraid) still matches");
 
             string cfg = File.ReadAllText(Path.Combine(dir, "CalamityMusic.BossThemes.cfg"));
             Check(cfg.Contains("GnorpBody = Generic") && cfg.Contains("BrotherBody = SupremeCalamitas"), "config lists defaults and auto-added bosses");
