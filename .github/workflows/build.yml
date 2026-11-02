@@ -25,6 +25,7 @@ jobs:
         run: |
           python3 tests/make_fixtures.py tests/fixtures
           dotnet run --project tests/CalamityMusic.Tests -c Release -- tests/fixtures tests/out
+          python3 tests/test_get_songs.py tests/fixtures
 
       - name: Build and pack
         run: ./build.sh

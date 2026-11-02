@@ -22,7 +22,9 @@ Start the game once. The mod creates its music folders and a guide.
 
 ## Adding songs
 
-Go to **Settings > Mod Options > Calamity Music > Open Music Folder**, or browse to
+**Easiest:** follow [SONGS.md](SONGS.md). Subscribe to the free Calamity music mods on Steam Workshop (and/or buy DM DOKURO's album on Bandcamp), then run `python tools/get_songs.py`. It finds those songs on your PC and files every one into the right boss folder with the right name.
+
+**By hand:** go to **Settings > Mod Options > Calamity Music > Open Music Folder**, or browse to
 
 ```
 BepInEx/config/CalamityMusic/Music/
@@ -87,7 +89,7 @@ If a boss's folder is empty the mod tries the `Generic` folder, then any song yo
 
 **Infernum folder:** Infernum only has its own tracks for a few bosses, all by PinpinNeon: `SupremeCalamitas` (Scars of Calamity), `ExoMechs` (Catastrophic Fabrications, Zenith Fabrications) and `PrimordialWyrm` (Vocitus Terminus). Everything else uses the Calamity song.
 
-**Extensions folder (Calamity add-on mods):** `AvatarOfEmptiness` (Wrath of the Gods, ENNWAY! - PARADISE PARASITE), `NamelessDeity` (Wrath of the Gods, Heart Plus Up! & ENNWAY! - TWISTED GARDEN), `Mars` (Wrath of the Gods, Moonburn - RAMifications), `Goozma` (Hunt of the Old God), `Astrageldon` (Catalyst). ENNWAY! - Edenic Whispers is the Wrath of the Gods Eternal Garden theme; it fits nicely in `NamelessDeity` or `Generic`.
+**Extensions folder (Calamity add-on mods):** `AvatarOfEmptiness` (Wrath of the Gods, ENNWAY! - PARADISE PARASITE), `NamelessDeity` (Wrath of the Gods, Heart Plus Up! & ENNWAY! - TWISTED GARDEN), `Mars` (Wrath of the Gods, Moonburn - RAMifications), `Goozma` (Hunt of the Old God), `Astrageldon` (Catalyst). ENNWAY! - Edenic Whispers is the calm Wrath of the Gods Eternal Garden theme, so it goes in `Generic` rather than a boss folder.
 
 ## Which boss gets which theme
 

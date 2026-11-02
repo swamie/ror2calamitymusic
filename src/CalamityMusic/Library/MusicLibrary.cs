@@ -96,7 +96,11 @@ namespace CalamityMusic.Library
             sb.AppendLine("CALAMITY MUSIC - HOW TO ADD SONGS");
             sb.AppendLine("=================================");
             sb.AppendLine();
-            sb.AppendLine("Drop .ogg, .mp3 or .wav files into the folders next to this file:");
+            sb.AppendLine("Quickest way: subscribe to the free Calamity Mod Music / Infernum Mode Music / Wrath of the Gods");
+            sb.AppendLine("mods on Steam Workshop (open tModLoader once so they download), then run get_songs.py from");
+            sb.AppendLine("https://github.com/swamie/ror2calamitymusic - it files every song into the right folder for you.");
+            sb.AppendLine();
+            sb.AppendLine("Or drop .ogg, .mp3 or .wav files into the folders next to this file yourself:");
             sb.AppendLine();
             sb.AppendLine("  Calamity/<Boss>/     songs used in Calamity mode");
             sb.AppendLine("  Infernum/<Boss>/     songs used in Infernum mode (bosses with nothing here use the Calamity song)");

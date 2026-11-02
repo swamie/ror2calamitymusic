@@ -56,12 +56,12 @@ namespace CalamityMusic.Library
 
             // Calamity add-on mods (Wrath of the Gods, Catalyst, Hunt of the Old God).
             X("AvatarOfEmptiness", "Avatar of Emptiness (Wrath of the Gods)", "ENNWAY! - PARADISE PARASITE"),
-            X("NamelessDeity", "Nameless Deity of Light (Wrath of the Gods)", "Heart Plus Up! & ENNWAY! - TWISTED GARDEN | ENNWAY! - Edenic Whispers (Eternal Garden)"),
+            X("NamelessDeity", "Nameless Deity of Light (Wrath of the Gods)", "Heart Plus Up! & ENNWAY! - TWISTED GARDEN"),
             X("Mars", "XG-07 Mars (Wrath of the Gods)", "Moonburn - RAMifications"),
             X("Goozma", "Goozma (Hunt of the Old God)", "Glutinous Arbitration | Viscous Desperation"),
             X("Astrageldon", "Astrageldon (Catalyst)", "DM DOKURO - Cosmic Disgust | Heart Plus Up! - Galactic Destruction"),
 
-            S(Generic, "Any boss without a better match (modded bosses, hordes)", "Anything you like"),
+            S(Generic, "Any boss without a better match (modded bosses, hordes)", "Anything you like, e.g. ENNWAY! - Edenic Whispers"),
             S(Escape, "Moon escape after Mithrix (optional, leave empty to keep the vanilla escape music)", "DM DOKURO - UNIVERSAL COLLAPSE"),
         };
 
