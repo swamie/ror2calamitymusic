@@ -1,0 +1,8 @@
+bin/
+obj/
+dist/
+*.user
+.vs/
+.idea/
+tests/fixtures/
+tests/out/

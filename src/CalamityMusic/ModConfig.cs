@@ -1,0 +1,115 @@
+using BepInEx.Configuration;
+using CalamityMusic.Library;
+
+namespace CalamityMusic
+{
+    internal enum BuildupStyle
+    {
+        Synth,
+        CustomFiles,
+        Random,
+    }
+
+    internal enum MusicEndsWhen
+    {
+        TeleporterCharged,
+        BossDefeated,
+    }
+
+    internal enum SongEndBehaviour
+    {
+        LoopSong,
+        PlayAnotherFromTheme,
+    }
+
+    internal enum BannerPosition
+    {
+        TopLeft,
+        TopCenter,
+        TopRight,
+        MiddleLeft,
+        MiddleRight,
+        BottomLeft,
+        BottomCenter,
+        BottomRight,
+    }
+
+    internal static class ModConfig
+    {
+        // General
+        public static ConfigEntry<MusicMode> Mode;
+        public static ConfigEntry<float> Volume;
+        public static ConfigEntry<bool> FollowGameVolume;
+        public static ConfigEntry<float> BassBoost;
+        public static ConfigEntry<float> BassFrequency;
+
+        // Teleporter buildup
+        public static ConfigEntry<bool> BuildupEnabled;
+        public static ConfigEntry<BuildupStyle> Buildup;
+        public static ConfigEntry<float> BuildupLength;
+        public static ConfigEntry<float> ImpactStrength;
+
+        // Playback
+        public static ConfigEntry<MusicEndsWhen> EndsWhen;
+        public static ConfigEntry<SongEndBehaviour> OnSongEnd;
+        public static ConfigEntry<float> FadeOutSeconds;
+        public static ConfigEntry<bool> MuffleWhenPaused;
+        public static ConfigEntry<bool> AnySongFallback;
+        public static ConfigEntry<bool> MoonEscapeMusic;
+
+        // Now playing
+        public static ConfigEntry<bool> ShowNowPlaying;
+        public static ConfigEntry<float> NowPlayingSeconds;
+        public static ConfigEntry<BannerPosition> NowPlayingPosition;
+        public static ConfigEntry<float> NowPlayingScale;
+        public static ConfigEntry<bool> NowPlayingPulse;
+
+        // Advanced
+        public static ConfigEntry<string> MusicFolderOverride;
+
+        public static void Bind(ConfigFile cfg)
+        {
+            const string G = "General";
+            Mode = cfg.Bind(G, "Music", MusicMode.Calamity,
+                "Which music plays during teleporter events and boss fights.\n" +
+                "Vanilla = normal Risk of Rain 2 music. Calamity = Calamity songs. Infernum = Infernum versions where you have them, Calamity songs otherwise. Mixed = everything shuffled together.");
+            Volume = cfg.Bind(G, "Music Volume", 70f, "Volume of the Calamity music, 0-100%.");
+            FollowGameVolume = cfg.Bind(G, "Follow In-Game Volume", true,
+                "Also scale by the game's own Master and Music volume settings.");
+            BassBoost = cfg.Bind(G, "Bass Boost", 7f, "Live bass boost in dB (0 = off). A limiter keeps it from clipping.");
+            BassFrequency = cfg.Bind(G, "Bass Boost Frequency", 90f, "Center of the bass boost in Hz. Lower = deeper sub, higher = punchier.");
+
+            const string B = "Teleporter Buildup";
+            BuildupEnabled = cfg.Bind(B, "Enable Buildup", true,
+                "Play a buildup while the teleporter turns red, then drop into the boss theme.");
+            Buildup = cfg.Bind(B, "Buildup Style", BuildupStyle.Random,
+                "Synth = generated riser. CustomFiles = random file from Music/Buildups (falls back to Synth if empty). Random = either.");
+            BuildupLength = cfg.Bind(B, "Buildup Length", 5f,
+                "Seconds from activating the teleporter to the drop. The drop waits for the boss to actually spawn.");
+            ImpactStrength = cfg.Bind(B, "Drop Impact", 80f, "Loudness of the bass hit layered on the drop, 0-100% (0 = off).");
+
+            const string P = "Playback";
+            EndsWhen = cfg.Bind(P, "Teleporter Music Ends When", MusicEndsWhen.TeleporterCharged,
+                "TeleporterCharged = keep the boss theme going until the teleporter hits 100% (and every boss is dead). BossDefeated = stop as soon as the bosses die.");
+            OnSongEnd = cfg.Bind(P, "When A Song Ends", SongEndBehaviour.LoopSong,
+                "LoopSong = loop it seamlessly like in Terraria. PlayAnotherFromTheme = crossfade into another song for the same boss.");
+            FadeOutSeconds = cfg.Bind(P, "Fade Out Time", 3f, "Seconds to fade the Calamity music out after a fight.");
+            MuffleWhenPaused = cfg.Bind(P, "Muffle When Paused", true, "Muffle and lower the music while the pause menu is open.");
+            AnySongFallback = cfg.Bind(P, "Use Any Song As Fallback", true,
+                "If a boss has no songs in its theme folders (or in Generic), play any song from your library instead of the vanilla music.");
+            MoonEscapeMusic = cfg.Bind(P, "Moon Escape Music", true,
+                "Play a song from the MoonEscape folder during the escape after Mithrix. If the folder is empty the vanilla escape music plays.");
+
+            const string N = "Now Playing";
+            ShowNowPlaying = cfg.Bind(N, "Show Now Playing", true, "Show the song name banner when a boss theme starts.");
+            NowPlayingSeconds = cfg.Bind(N, "Display Time", 6f, "Seconds the banner stays on screen.");
+            NowPlayingPosition = cfg.Bind(N, "Position", BannerPosition.TopCenter, "Where the banner appears.");
+            NowPlayingScale = cfg.Bind(N, "Scale", 100f, "Banner size in %.");
+            NowPlayingPulse = cfg.Bind(N, "Pulse With Bass", true, "Make the banner glow and bump to the bass.");
+
+            const string A = "Advanced";
+            MusicFolderOverride = cfg.Bind(A, "Music Folder", "",
+                "Leave empty to use BepInEx/config/CalamityMusic/Music. Set a full path to keep your songs somewhere else.");
+        }
+    }
+}

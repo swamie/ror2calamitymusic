@@ -1,0 +1,486 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using CalamityMusic.Audio;
+using CalamityMusic.Library;
+
+namespace CalamityMusic
+{
+    // The mod's Log lives in Plugin.cs (BepInEx); the harness gets a console version.
+    internal static class Log
+    {
+        public static bool Quiet;
+        public static void Info(string m) { if (!Quiet) Console.WriteLine("    [info] " + m); }
+        public static void Warning(string m) => Console.WriteLine("    [warn] " + m);
+        public static void Error(string m) => Console.WriteLine("    [error] " + m);
+    }
+}
+
+namespace CalamityMusic.Tests
+{
+    internal static class Program
+    {
+        private static int failures, checks;
+        private static string fixtures, outDir;
+        private const int SR = MusicEngine.SampleRate;
+
+        private static int Main(string[] args)
+        {
+            if (args.Length > 0 && args[0] == "mp3debug")
+            {
+                foreach (string f in args.Skip(1))
+                    using (var m = AudioDecoder.Open(f))
+                        Console.WriteLine($"{Path.GetFileName(f)}: {m.SampleRate} Hz x{m.Channels}, len {m.LengthSeconds:0.000}s, decoded {ReadAll(m).Length / m.Channels / (double)m.SampleRate:0.000}s");
+                return 0;
+            }
+            if (args.Length > 1 && args[0] == "preview")
+            {
+                // Renders the synth buildup + drop impact (no song) so you can hear it.
+                Directory.CreateDirectory(args[1]);
+                string silent = Path.Combine(args[1], "silence.wav");
+                WriteWav(silent, new List<float>(new float[SR * 2 * 6]));
+                var engine = new MusicEngine { Volume = 0.8f, BassBoostDb = 7f, BassFrequency = 90f };
+                var rec = new Recorder(engine);
+                engine.StartBuildup(new BuildupSynth(5f, 7));
+                rec.Render(5.0);
+                engine.Play(TrackInfo.FromFile(silent, "Calamity", "Generic"), false, Transition.Drop(0.8f));
+                rec.WaitForLoad();
+                rec.Render(3.5);
+                WriteWav(Path.Combine(args[1], "buildup_preview.wav"), rec.Samples);
+                Console.WriteLine("wrote buildup_preview.wav");
+                return 0;
+            }
+            fixtures = args.Length > 0 ? args[0] : "fixtures";
+            outDir = args.Length > 1 ? args[1] : "out";
+            Directory.CreateDirectory(outDir);
+
+            Run("Decoders", Decoders);
+            Run("Resampler quality", Resampler);
+            Run("Seamless looping", Looping);
+            Run("Track names and tags", TrackNames);
+            Run("Limiter", LimiterTest);
+            Run("Buildup -> drop", BuildupDrop);
+            Run("Bass boost", BassBoost);
+            Run("Crossfade and stop", CrossfadeStop);
+            Run("Song end events", SongEnd);
+            Run("Library folders and picking", LibraryTest);
+            Run("Boss theme mapping", ThemesTest);
+
+            Console.WriteLine();
+            Console.WriteLine(failures == 0 ? $"ALL {checks} CHECKS PASSED" : $"{failures} of {checks} CHECKS FAILED");
+            return failures == 0 ? 0 : 1;
+        }
+
+        private static void Run(string name, Action test)
+        {
+            Console.WriteLine("== " + name);
+            try { test(); }
+            catch (Exception e) { Check(false, "threw " + e); }
+        }
+
+        private static void Check(bool ok, string what)
+        {
+            checks++;
+            if (!ok) failures++;
+            Console.WriteLine((ok ? "  ok   " : "  FAIL ") + what);
+        }
+
+        private static string F(string name) => Path.Combine(fixtures, name);
+        private static string OggPath => Directory.GetFiles(fixtures, "*.ogg")[0];
+        private static string Mp3Path => Directory.GetFiles(fixtures, "*.mp3")[0];
+
+        private static float[] ReadAll(ISampleSource s, int maxFloats = int.MaxValue)
+        {
+            var list = new List<float>();
+            var buf = new float[8192];
+            int n;
+            while (list.Count < maxFloats && (n = s.Read(buf, 0, buf.Length)) > 0)
+                list.AddRange(buf.Take(n));
+            return list.ToArray();
+        }
+
+        // ------------------------------------------------------------------ tests
+
+        private static void Decoders()
+        {
+            using (var w = AudioDecoder.Open(F("base.wav")))
+            {
+                Check(w is WavSource && w.SampleRate == 44100 && w.Channels == 2, "wav header");
+                Check(Math.Abs(w.LengthSeconds - 8.0) < 0.01, $"wav length {w.LengthSeconds:0.000}s");
+                int frames = ReadAll(w).Length / 2;
+                Check(Math.Abs(frames - 352800) <= 1, $"wav frames {frames}");
+            }
+            using (var o = AudioDecoder.Open(OggPath))
+            {
+                Check(o is OggSource && o.SampleRate == 44100 && o.Channels == 2, "ogg header");
+                Check(Math.Abs(o.LengthSeconds - 8.0) < 0.05, $"ogg length {o.LengthSeconds:0.000}s");
+                int frames = ReadAll(o).Length / 2;
+                Check(Math.Abs(frames - 352800) < 3000, $"ogg frames {frames}");
+            }
+            using (var m = AudioDecoder.Open(Mp3Path))
+            {
+                Check(m is Mp3Source && m.SampleRate == 22050 && m.Channels == 1, "mp3 header (mono 22.05k)");
+                Check(Math.Abs(m.LengthSeconds - 8.0) < 0.15, $"mp3 length {m.LengthSeconds:0.000}s");
+                var all = ReadAll(m);
+                Check(all.Length > 22050 * 7.8 && all.Max(Math.Abs) > 0.3f, $"mp3 decodes ({all.Length} samples)");
+            }
+            using (var h = AudioDecoder.Open(F("hires_96k.wav")))
+            {
+                var all = ReadAll(h);
+                float peak = all.Max(Math.Abs);
+                Check(h.SampleRate == 96000 && Math.Abs(peak - 0.8f) < 0.02f, $"24-bit 96k wav peak {peak:0.000}");
+            }
+            // A file with the wrong extension still opens by sniffing its header.
+            string fake = Path.Combine(outDir, "really_an_mp3.ogg");
+            File.Copy(Mp3Path, fake, true);
+            using (var s = AudioDecoder.Open(fake)) Check(s is Mp3Source, "format sniffing ignores wrong extension");
+        }
+
+        private static void Resampler()
+        {
+            using (var r = new SincResampler(new TrackReader(AudioDecoder.Open(F("sine_44k.wav")), 0, 0, 0, false), SR))
+            {
+                var x = Mono(ReadAll(r, SR * 2 * 2)).Skip(4800).Take(65536).ToArray();
+                var spec = Spectrum(x);
+                double binHz = (double)SR / x.Length;
+                int peak = Array.IndexOf(spec, spec.Skip(10).Max());
+                double peakHz = peak * binHz;
+                double noise = spec.Where((v, i) => i > 5 && Math.Abs(i - peak) > 12).Sum();
+                double snr = 10 * Math.Log10(spec[peak] / Math.Max(noise, 1e-30));
+                Check(Math.Abs(peakHz - 1000) < 2, $"44.1k->48k keeps 1 kHz at {peakHz:0.0} Hz");
+                Check(snr > 85, $"44.1k->48k SNR {snr:0.0} dB");
+            }
+            using (var r = new SincResampler(new TrackReader(AudioDecoder.Open(F("hires_96k.wav")), 0, 0, 0, false), SR))
+            {
+                var x = Mono(ReadAll(r)).Skip(4800).Take(65536).ToArray();
+                var spec = Spectrum(x);
+                double binHz = (double)SR / x.Length;
+                double at1k = Band(spec, binHz, 990, 1010);
+                double at18k = Band(spec, binHz, 17900, 18100); // where a 30 kHz tone would alias
+                double rejection = 10 * Math.Log10(at1k / Math.Max(at18k, 1e-30));
+                Check(rejection > 80, $"96k->48k alias rejection {rejection:0.0} dB");
+            }
+        }
+
+        private static void Looping()
+        {
+            using (var reader = new TrackReader(AudioDecoder.Open(F("base.wav")), 0, 0.5, 0, true))
+            {
+                var data = ReadAll(reader, 44100 * 2 * 20); // 20 s from an 8 s file
+                Check(reader.LoopCount >= 2, $"looped {reader.LoopCount} times");
+                Check(!reader.Ended, "looping track never ends");
+                int run = 0, worst = 0;
+                for (int i = 0; i < data.Length; i += 2)
+                {
+                    run = data[i] == 0f ? run + 1 : 0;
+                    worst = Math.Max(worst, run);
+                }
+                Check(worst < 4, $"no gap at the loop seam (longest zero run {worst})");
+            }
+        }
+
+        private static void TrackNames()
+        {
+            var ogg = TrackInfo.FromFile(OggPath, "Calamity", "SupremeCalamitas");
+            Check(ogg.Display == "Test Artist - Ogg Song", $"filename display '{ogg.Display}'");
+            Check(Math.Abs(ogg.StartSeconds - 1.0) < 1e-6 && Math.Abs(ogg.GainDb + 2) < 1e-6, "start/gain tags parsed and hidden");
+
+            var mp3 = TrackInfo.FromFile(Mp3Path, "Calamity", "Generic");
+            Check(mp3.Display == "DM DOKURO - Mp3 Tag Title", $"ID3 fallback display '{mp3.Display}'");
+
+            var loop = TrackInfo.FromFile(Path.Combine(outDir, "Big Song [loop=1:10].wav"), "Calamity", "Yharon");
+            Check(loop.Title == "Big Song" && Math.Abs(loop.LoopStartSeconds - 70) < 1e-6, "loop tag parsed");
+
+            var junk = TrackInfo.FromFile(Path.Combine(outDir, "DM DOKURO - Universal Collapse (Official Audio) [HQ].mp3"), "Calamity", "DevourerOfGods");
+            Check(junk.Display == "DM DOKURO - Universal Collapse", $"YouTube junk stripped '{junk.Display}'");
+        }
+
+        private static void LimiterTest()
+        {
+            var lim = new Limiter(SR);
+            float peak = 0, tailPeak = 0;
+            for (int i = 0; i < SR; i++)
+            {
+                float l = 4f * (float)Math.Sin(2 * Math.PI * 60 * i / SR), r = l;
+                lim.Process(ref l, ref r);
+                peak = Math.Max(peak, Math.Abs(l));
+                if (i > SR / 2) tailPeak = Math.Max(tailPeak, Math.Abs(l));
+            }
+            Check(peak <= lim.Ceiling + 1e-6f, $"never exceeds ceiling (peak {peak:0.0000})");
+            Check(tailPeak > lim.Ceiling * 0.9f, $"stays loud ({tailPeak:0.000})");
+        }
+
+        private sealed class Recorder
+        {
+            public readonly List<float> Samples = new List<float>();
+            public readonly List<(double time, EngineEvent e)> Events = new List<(double, EngineEvent)>();
+            private readonly MusicEngine engine;
+            private readonly float[] block = new float[2400 * 2];
+            public double Time => Samples.Count / 2.0 / SR;
+
+            public Recorder(MusicEngine engine) { this.engine = engine; }
+
+            public void Render(double seconds)
+            {
+                int blocks = (int)Math.Round(seconds * SR / 2400);
+                for (int b = 0; b < blocks; b++)
+                {
+                    engine.RenderOffline(block, 2400);
+                    Samples.AddRange(block);
+                    while (engine.Events.TryDequeue(out var e)) Events.Add((Time, e));
+                }
+            }
+
+            /// <summary>Background song loading happens on the thread pool; give it real time to finish.</summary>
+            public void WaitForLoad() => Thread.Sleep(400);
+
+            public double Rms(double from, double to)
+            {
+                int a = (int)(from * SR) * 2, b = Math.Min(Samples.Count, (int)(to * SR) * 2);
+                double sum = 0;
+                for (int i = a; i < b; i++) sum += Samples[i] * Samples[i];
+                return Math.Sqrt(sum / Math.Max(1, b - a));
+            }
+
+            public float Peak => Samples.Max(Math.Abs);
+
+            /// <summary>RMS above 200 Hz: a rough stand-in for perceived loudness that ignores sub rumble.</summary>
+            public double Presence(double from, double to)
+            {
+                var hp = new Biquad();
+                hp.SetHighPass(SR, 200f, 0.707f);
+                int a = (int)(from * SR), b = Math.Min(Samples.Count / 2, (int)(to * SR));
+                double sum = 0;
+                for (int i = Math.Max(0, a - 2400); i < b; i++)
+                {
+                    float y = hp.Process((Samples[2 * i] + Samples[2 * i + 1]) * 0.5f);
+                    if (i >= a) sum += y * y;
+                }
+                return Math.Sqrt(sum / Math.Max(1, b - a));
+            }
+        }
+
+        private static void BuildupDrop()
+        {
+            var engine = new MusicEngine { Volume = 1f, BassBoostDb = 8f };
+            var rec = new Recorder(engine);
+            var track = TrackInfo.FromFile(OggPath, "Calamity", "SupremeCalamitas");
+
+            engine.StartBuildup(new BuildupSynth(4f, 1234));
+            rec.Render(4.0);
+            engine.Play(track, true, Transition.Drop(0.8f));
+            rec.WaitForLoad();
+            rec.Render(8.0);
+            WriteWav(Path.Combine(outDir, "buildup_drop.wav"), rec.Samples);
+
+            Check(rec.Samples.All(s => !float.IsNaN(s) && !float.IsInfinity(s)), "no NaN/Inf");
+            Check(rec.Peak <= 0.9701f, $"peak {rec.Peak:0.000} stays under the limiter ceiling");
+            var started = rec.Events.Where(e => e.e.Kind == EngineEventKind.TrackStarted && e.e.Message != "loop").ToList();
+            Check(started.Count == 1, $"one TrackStarted event ({started.Count})");
+            Check(rec.Events.Any(e => e.e.Kind == EngineEventKind.TrackStarted && e.e.Message == "loop"), "loop is reported (song is 7 s long here)");
+            if (started.Count > 0)
+                Check(started[0].time > 4.0 && started[0].time < 4.2, $"song starts right after the build ({started[0].time:0.000}s)");
+            double early = rec.Presence(0.2, 1.0), late = rec.Presence(3.2, 3.95);
+            Check(late > early * 4, $"buildup rises (presence {early:0.000} -> {late:0.000})");
+            Check(rec.Rms(3.2, 3.95) > 0.2, $"buildup ends loud enough to meet the drop (rms {rec.Rms(3.2, 3.95):0.000})");
+            late = rec.Rms(3.2, 3.95);
+            double gap = rec.Rms(4.06, 4.085), after = rec.Rms(4.2, 6.0);
+            Check(gap < late * 0.25, $"breath of silence before the drop (rms {gap:0.0000})");
+            Check(after > 0.08, $"song + impact after the drop (rms {after:0.000})");
+        }
+
+        private static void BassBoost()
+        {
+            double Ratio(float db)
+            {
+                var engine = new MusicEngine { Volume = 0.5f, BassBoostDb = db, BassFrequency = 90f };
+                var rec = new Recorder(engine);
+                engine.Play(TrackInfo.FromFile(F("base.wav"), "Calamity", "Generic"), true, Transition.FadeIn(0.01f));
+                rec.WaitForLoad();
+                rec.Render(4.0);
+                var x = Mono(rec.Samples.ToArray()).Skip(SR * 2).Take(65536).ToArray();
+                var spec = Spectrum(x);
+                double binHz = (double)SR / x.Length;
+                return 10 * Math.Log10(Band(spec, binHz, 30, 120) / Band(spec, binHz, 600, 2000));
+            }
+            double flat = Ratio(0f), boosted = Ratio(10f);
+            Check(boosted - flat > 6, $"low end raised by {boosted - flat:0.0} dB relative to mids");
+        }
+
+        private static void CrossfadeStop()
+        {
+            var engine = new MusicEngine { Volume = 1f, BassBoostDb = 0f };
+            var rec = new Recorder(engine);
+            engine.Play(TrackInfo.FromFile(F("base.wav"), "Calamity", "A"), true, Transition.FadeIn(0.05f));
+            rec.WaitForLoad();
+            rec.Render(2.0);
+            int firstVoice = engine.ActiveMusicVoice;
+            engine.Play(TrackInfo.FromFile(OggPath, "Calamity", "B"), true, Transition.Crossfade(1f));
+            rec.WaitForLoad();
+            rec.Render(1.5);
+            Check(engine.ActiveMusicVoice != 0 && engine.ActiveMusicVoice != firstVoice, "crossfade hands over to the new song");
+            Check(rec.Rms(2.2, 3.0) > 0.05, "no dropout during crossfade");
+            engine.StopAll(0.5f);
+            rec.Render(1.0);
+            Check(rec.Rms(4.05, 4.45) < 1e-4, "silent after StopAll");
+            Check(!engine.AnythingPlaying, "all voices released");
+        }
+
+        private static void SongEnd()
+        {
+            var engine = new MusicEngine { Volume = 1f };
+            var rec = new Recorder(engine);
+            engine.Play(TrackInfo.FromFile(F("base.wav"), "Calamity", "A"), false, Transition.FadeIn(0.01f));
+            rec.WaitForLoad();
+            rec.Render(9.0);
+            var ending = rec.Events.FirstOrDefault(e => e.e.Kind == EngineEventKind.TrackEnding);
+            var ended = rec.Events.FirstOrDefault(e => e.e.Kind == EngineEventKind.TrackEnded);
+            Check(ending.e.Kind == EngineEventKind.TrackEnding && ending.time > 4.5 && ending.time < 5.5, $"TrackEnding ~3 s early ({ending.time:0.00}s)");
+            Check(ended.e.Kind == EngineEventKind.TrackEnded && ended.time > 7.9, $"TrackEnded at the end ({ended.time:0.00}s)");
+        }
+
+        private static void LibraryTest()
+        {
+            string root = Path.Combine(outDir, "lib", "Music");
+            if (Directory.Exists(Path.Combine(outDir, "lib"))) Directory.Delete(Path.Combine(outDir, "lib"), true);
+            var lib = new MusicLibrary(root);
+            lib.EnsureFolders();
+            Check(Directory.Exists(Path.Combine(root, "Calamity", "SupremeCalamitas")), "creates Calamity boss folders");
+            Check(Directory.Exists(Path.Combine(root, "Infernum", "SupremeCalamitas")) && !Directory.Exists(Path.Combine(root, "Infernum", "Crabulon")), "creates Infernum folders only where Infernum has a track");
+            Check(File.Exists(Path.Combine(root, "HOW_TO_ADD_SONGS.txt")), "writes song guide");
+
+            void Put(string rel, string src)
+            {
+                string p = Path.Combine(root, rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(p));
+                File.Copy(src, p, true);
+            }
+            Put("Calamity/SupremeCalamitas/DM DOKURO - Stained, Brutal Calamity.ogg", OggPath);
+            Put("Calamity/SupremeCalamitas/DM DOKURO - SCal Alt.ogg", OggPath);
+            Put("Infernum/SupremeCalamitas/PinpinNeon - Scars of Calamity.ogg", OggPath);
+            Put("Calamity/Generic/Any - Generic Song.mp3", Mp3Path);
+            Put("Extensions/NamelessDeity/ENNWAY! - Edenic Whispers.wav", F("base.wav"));
+            Put("MyPack/Yharon/Me - Custom Yharon.wav", F("base.wav"));
+            Put("Calamity/MoonEscape/DM DOKURO - UNIVERSAL COLLAPSE.wav", F("base.wav"));
+            Put("Buildups/Riser.wav", F("base.wav"));
+            lib.Rescan();
+            Check(lib.TrackCount == 7 && lib.BuildupCount == 1, $"indexed {lib.TrackCount} songs, {lib.BuildupCount} buildup");
+
+            string P(MusicMode mode, params string[] slots) => lib.Pick(slots, mode, null, true, out _)?.Title;
+            Check(P(MusicMode.Calamity, "SupremeCalamitas").StartsWith("S"), "Calamity mode uses the Calamity folder");
+            Check(P(MusicMode.Infernum, "SupremeCalamitas") == "Scars of Calamity", "Infernum mode prefers the Infernum version");
+            Check(P(MusicMode.Infernum, "NamelessDeity") == "Edenic Whispers", "Infernum mode falls back to Calamity/Extensions");
+            Check(P(MusicMode.Calamity, "Yharon") == "Custom Yharon", "custom pack folders count as extensions");
+            var cryo = lib.Pick(new[] { "Cryogen" }, MusicMode.Calamity, null, true, out bool fb);
+            Check(cryo?.Title == "Generic Song" && fb, "empty theme falls back to Generic");
+            var seen = new HashSet<string>();
+            for (int i = 0; i < 40; i++) seen.Add(P(MusicMode.Mixed, "SupremeCalamitas"));
+            Check(seen.Count == 3, $"Mixed mode shuffles every pack ({seen.Count} distinct)");
+            string a = P(MusicMode.Calamity, "SupremeCalamitas"), b = P(MusicMode.Calamity, "SupremeCalamitas"), c = P(MusicMode.Calamity, "SupremeCalamitas");
+            Check(a != b && b != c, "doesn't repeat the same song twice in a row");
+            Check(lib.PickEscape(MusicMode.Calamity)?.Title == "UNIVERSAL COLLAPSE", "moon escape folder");
+
+            File.Delete(Path.Combine(root, "Calamity/Generic/Any - Generic Song.mp3"));
+            lib.Rescan();
+            var any = lib.Pick(new[] { "Cryogen" }, MusicMode.Calamity, null, true, out _);
+            Check(any != null && any.Slot != "MoonEscape", $"any-song fallback skips the escape folder ({any?.Slot})");
+            Check(lib.Pick(new[] { "Cryogen" }, MusicMode.Calamity, null, false, out _) == null, "fallback can be turned off");
+        }
+
+        private static void ThemesTest()
+        {
+            string dir = Path.Combine(outDir, "cfg");
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            Directory.CreateDirectory(dir);
+            var themes = new BossThemes(dir);
+
+            var mithrix = themes.Resolve("BrotherBody", "Mithrix");
+            Check(mithrix.Slots.SequenceEqual(new[] { "SupremeCalamitas" }) && mithrix.IsFinale, "Mithrix -> Supreme Calamitas (finale)");
+            Check(themes.Resolve("BrotherHurtBody", null).SharesSlotWith(mithrix), "Mithrix phase 4 continues the same song");
+            Check(themes.Resolve("VagrantBody", "Wandering Vagrant").Slots[0] == "LeviathanAnahita", "jellyfish -> aquatic");
+            Check(themes.Resolve("LampBossBody", "Wayfarer").Slots.Contains("ProfanedGuardians"), "Starstorm 2 Wayfarer mapped");
+            Check(themes.Resolve("NemCommandoBody", "Nemesis Commando").Slots[0] == "CalamitasClone", "Starstorm 2 Nemesis Commando mapped");
+            Check(themes.Resolve("LemurianBruiserBody", "Elder Lemurian").Slots[0] == "Yharon", "unknown lizard guessed as Yharon");
+            Check(themes.Resolve("LightningGolemBody", null).Slots[0] == "StormWeaver", "keyword order: lightning beats light");
+            var heart = themes.Resolve("SolusHeartBody", "Solus Heart");
+            Check(heart.Slots[0] == "ExoMechs" && heart.IsFinale, "new DLC final boss guessed as Exo Mechs finale");
+            Check(themes.Resolve("ProvidenceBody", "Providence").Slots[0] == "Providence", "Providence -> Providence");
+            Check(themes.Resolve("GnorpBody", "Gnorp").Slots[0] == Slots.Generic, "nameless modded boss -> Generic");
+
+            string cfg = File.ReadAllText(Path.Combine(dir, "CalamityMusic.BossThemes.cfg"));
+            Check(cfg.Contains("GnorpBody = Generic") && cfg.Contains("BrotherBody = SupremeCalamitas"), "config lists defaults and auto-added bosses");
+
+            File.WriteAllText(Path.Combine(dir, "CalamityMusic.BossThemes.cfg"), cfg.Replace("VagrantBody = LeviathanAnahita, AquaticScourge", "VagrantBody = Vanilla"));
+            themes.Reload();
+            Check(themes.Resolve("VagrantBody", null).KeepVanilla, "editing the config to Vanilla keeps the game's music");
+        }
+
+        // ------------------------------------------------------------------ helpers
+
+        private static float[] Mono(float[] stereo)
+        {
+            var m = new float[stereo.Length / 2];
+            for (int i = 0; i < m.Length; i++) m[i] = (stereo[2 * i] + stereo[2 * i + 1]) * 0.5f;
+            return m;
+        }
+
+        /// <summary>Power spectrum with a Blackman-Harris window (length must be a power of two).</summary>
+        private static double[] Spectrum(float[] x)
+        {
+            int n = x.Length;
+            var re = new double[n];
+            var im = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                double t = (double)i / (n - 1);
+                double w = 0.35875 - 0.48829 * Math.Cos(2 * Math.PI * t) + 0.14128 * Math.Cos(4 * Math.PI * t) - 0.01168 * Math.Cos(6 * Math.PI * t);
+                re[i] = x[i] * w;
+            }
+            for (int i = 1, j = 0; i < n; i++)
+            {
+                int bit = n >> 1;
+                for (; (j & bit) != 0; bit >>= 1) j ^= bit;
+                j ^= bit;
+                if (i < j) { (re[i], re[j]) = (re[j], re[i]); (im[i], im[j]) = (im[j], im[i]); }
+            }
+            for (int len = 2; len <= n; len <<= 1)
+            {
+                double ang = -2 * Math.PI / len;
+                for (int i = 0; i < n; i += len)
+                    for (int k = 0; k < len / 2; k++)
+                    {
+                        double cr = Math.Cos(ang * k), ci = Math.Sin(ang * k);
+                        int a = i + k, b = i + k + len / 2;
+                        double tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+                        re[b] = re[a] - tr; im[b] = im[a] - ti;
+                        re[a] += tr; im[a] += ti;
+                    }
+            }
+            var p = new double[n / 2];
+            for (int i = 0; i < p.Length; i++) p[i] = re[i] * re[i] + im[i] * im[i];
+            return p;
+        }
+
+        private static double Band(double[] spec, double binHz, double lo, double hi)
+        {
+            double s = 0;
+            for (int i = (int)(lo / binHz); i <= (int)(hi / binHz) && i < spec.Length; i++) s += spec[i];
+            return s;
+        }
+
+        private static void WriteWav(string path, List<float> stereo)
+        {
+            using (var bw = new BinaryWriter(File.Create(path)))
+            {
+                int bytes = stereo.Count * 2;
+                bw.Write("RIFF".ToCharArray()); bw.Write(36 + bytes); bw.Write("WAVE".ToCharArray());
+                bw.Write("fmt ".ToCharArray()); bw.Write(16); bw.Write((short)1); bw.Write((short)2);
+                bw.Write(SR); bw.Write(SR * 4); bw.Write((short)4); bw.Write((short)16);
+                bw.Write("data".ToCharArray()); bw.Write(bytes);
+                foreach (float f in stereo) bw.Write((short)Math.Max(-32768, Math.Min(32767, f * 32767f)));
+            }
+        }
+    }
+}
