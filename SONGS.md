@@ -37,7 +37,7 @@ Official channels to listen first:
 
 ## Multi-part songs
 
-Some themes come in parts in the music mods: Supreme Calamitas (three sections), Devourer of Gods (phase 1 then phase 2), Yharon, Avatar of Emptiness, Nameless Deity, the Infernum Exo Mechs and Boss Rush tiers. The installer tags these `[seq=name N]`. The mod always starts the fight at part 1 and moves on to the next part without a gap when one ends, just like in Terraria. Only the last part loops.
+Some themes come in parts in the music mods: Supreme Calamitas (three sections), Devourer of Gods (phase 1 then phase 2), Yharon, Avatar of Emptiness, Nameless Deity, the Infernum Exo Mechs and Boss Rush tiers. The installer tags these `[seq=name N]`. The mod always starts the fight at part 1 and moves on to the next part without a gap when one ends, just like in Terraria. Only the last part loops. For Mithrix, Voidling and False Son the parts follow the fight's phases instead, and each part loops until the next phase starts. In the Simulacrum the Boss Rush tiers play in order, a tier every 10 waves. To tag your own files, add `[seq=anyname 1]`, `[seq=anyname 2]` and so on to the file names.
 
 ## The full list
 

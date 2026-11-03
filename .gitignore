@@ -8,3 +8,4 @@ tests/fixtures/
 tests/out/
 __pycache__/
 *.pyc
+tests/CalamityMusic.Tests/out/

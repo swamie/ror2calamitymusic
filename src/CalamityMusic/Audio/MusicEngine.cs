@@ -83,6 +83,10 @@ namespace CalamityMusic.Audio
         private volatile float bassBoostDb = 6f;
         private volatile float bassFrequency = 90f;
         private volatile float muffle;
+        private volatile float lowHealth;
+        private float currentLow;
+        private long heartFrame;
+        private float heartPhaseL, heartPhaseD;
 
         // Written by the audio thread, read by the main thread.
         private volatile float bassLevel;
@@ -102,6 +106,9 @@ namespace CalamityMusic.Audio
         public float BassBoostDb { set => bassBoostDb = Math.Max(0f, Math.Min(18f, value)); }
         public float BassFrequency { set => bassFrequency = Math.Max(30f, Math.Min(250f, value)); }
         public float Muffle { set => muffle = Math.Max(0f, Math.Min(1f, value)); }
+
+        /// <summary>0..1: how close to death the player is. Muffles the music and adds a heartbeat.</summary>
+        public float LowHealth { set => lowHealth = Math.Max(0f, Math.Min(1f, value)); }
 
         public MusicEngine()
         {
@@ -210,7 +217,17 @@ namespace CalamityMusic.Audio
         public void StopAll(float fadeSeconds)
         {
             Interlocked.Increment(ref generation);
-            commands.Enqueue(() => FadeOutKinds(fadeSeconds, VoiceKind.Music, VoiceKind.Buildup, VoiceKind.OneShot));
+            commands.Enqueue(() =>
+            {
+                if (TapeActive)
+                {
+                    // Stopping while the tape is slowed/stopped: drop everything now and reset the speed.
+                    foreach (var v in voices) v.Finished = true;
+                    TapeReset();
+                    return;
+                }
+                FadeOutKinds(fadeSeconds, VoiceKind.Music, VoiceKind.Buildup, VoiceKind.OneShot);
+            });
         }
 
         // ------------------------------------------------------------------ audio-thread internals
@@ -325,8 +342,31 @@ namespace CalamityMusic.Audio
             }
 
             int samples = frames * 2;
+            bool tape = TapeActive;
+            if (tape) TapeRender(frames);
+            else MixVoices(frames);
+
+            if (voices.Count == 0 && !tape) idleFrames += frames; else idleFrames = 0;
+            if (idleFrames > SampleRate * 2)
+            {
+                // Nothing has played for a while: skip the DSP entirely.
+                Array.Clear(output, 0, samples);
+                bassLevel = 0f;
+                level = 0f;
+                return;
+            }
+
+            UpdateFilters();
+            MasterChain(output, frames);
+        }
+
+        /// <summary>Mixes <paramref name="frames"/> frames of every voice into <see cref="mix"/>.</summary>
+        private void MixVoices(int frames)
+        {
+            int samples = frames * 2;
             if (mix.Length < samples) mix = new float[samples];
             Array.Clear(mix, 0, samples);
+            if (frames == 0) return;
 
             int music = 0;
             for (int i = 0; i < voices.Count; i++)
@@ -372,20 +412,104 @@ namespace CalamityMusic.Audio
             }
             activeMusicVoice = music;
             anythingPlaying = voices.Count > 0;
+        }
 
-            if (voices.Count == 0) idleFrames += frames; else idleFrames = 0;
-            if (idleFrames > SampleRate * 2)
+        // ------------------------------------------------------------------ tape stop (varispeed)
+
+        private float tapeRate = 1f, tapeTarget = 1f, tapeStep;
+        private float[] tapeBuf = new float[(FramesPerBuffer + 8) * 2];
+        private float[] tapeRates = new float[FramesPerBuffer];
+        private float[] tapeOut = new float[FramesPerBuffer * 2];
+        private int tapeBufFrames;
+        private double tapePos;
+
+        private bool TapeActive => tapeRate < 0.9999f || tapeTarget < 1f;
+
+        /// <summary>Slows everything down to a halt like a stopped tape (pitch drops with it).</summary>
+        public void TapeStop(float seconds) => commands.Enqueue(() =>
+        {
+            tapeTarget = 0f;
+            tapeStep = 1f / (SampleRate * Math.Max(0.05f, seconds));
+        });
+
+        /// <summary>Spins the tape back up to normal speed.</summary>
+        public void TapeStart(float seconds) => commands.Enqueue(() =>
+        {
+            tapeTarget = 1f;
+            tapeStep = 1f / (SampleRate * Math.Max(0.05f, seconds));
+        });
+
+        private void TapeReset()
+        {
+            tapeRate = tapeTarget = 1f;
+            tapeBufFrames = 0;
+            tapePos = 0;
+        }
+
+        private void TapeRender(int frames)
+        {
+            if (tapeRates.Length < frames) tapeRates = new float[frames];
+            if (tapeOut.Length < frames * 2) tapeOut = new float[frames * 2];
+
+            // Speed for every output frame (eased so it starts and ends smoothly).
+            double total = 0;
+            float r = tapeRate;
+            for (int i = 0; i < frames; i++)
             {
-                // Nothing has played for a while: skip the DSP entirely.
-                Array.Clear(output, 0, samples);
-                bassLevel = 0f;
-                level = 0f;
-                return;
+                if (r != tapeTarget) r = r < tapeTarget ? Math.Min(tapeTarget, r + tapeStep) : Math.Max(tapeTarget, r - tapeStep);
+                float eff = r * r * (3f - 2f * r);
+                tapeRates[i] = eff;
+                total += eff;
+            }
+            tapeRate = r;
+
+            // Pull just as much new audio as the slowed playback needs.
+            int need = (int)Math.Floor(tapePos + total) + 2;
+            if (need > tapeBufFrames)
+            {
+                int add = need - tapeBufFrames;
+                MixVoices(add);
+                if (tapeBuf.Length < need * 2)
+                {
+                    var bigger = new float[need * 2 + 64];
+                    Array.Copy(tapeBuf, bigger, tapeBufFrames * 2);
+                    tapeBuf = bigger;
+                }
+                Array.Copy(mix, 0, tapeBuf, tapeBufFrames * 2, add * 2);
+                tapeBufFrames += add;
             }
 
-            UpdateFilters();
-            MasterChain(output, frames);
+            for (int i = 0, o = 0; i < frames; i++, o += 2)
+            {
+                int k = (int)tapePos;
+                float f = (float)(tapePos - k);
+                int a = k * 2, b = Math.Min(k + 1, tapeBufFrames - 1) * 2;
+                float gain = Math.Min(1f, tapeRates[i] * 4f); // fade the last subsonic bit instead of thumping
+                tapeOut[o] = (tapeBuf[a] + (tapeBuf[b] - tapeBuf[a]) * f) * gain;
+                tapeOut[o + 1] = (tapeBuf[a + 1] + (tapeBuf[b + 1] - tapeBuf[a + 1]) * f) * gain;
+                tapePos += tapeRates[i];
+            }
+
+            int consumed = Math.Min((int)Math.Floor(tapePos), tapeBufFrames);
+            if (consumed > 0)
+            {
+                Array.Copy(tapeBuf, consumed * 2, tapeBuf, 0, (tapeBufFrames - consumed) * 2);
+                tapeBufFrames -= consumed;
+                tapePos -= consumed;
+            }
+
+            if (mix.Length < frames * 2) mix = new float[frames * 2];
+            Array.Copy(tapeOut, mix, frames * 2);
+            if (!TapeActive) TapeReset(); // back to full speed: hand over to direct mixing
         }
+
+        /// <summary>Plays the drop impact on its own (final-phase hits).</summary>
+        public void PlayImpact(float strength) => commands.Enqueue(() =>
+        {
+            var v = NewVoice(VoiceKind.OneShot, new ImpactSource(strength));
+            v.Fade = 1f;
+            voices.Add(v);
+        });
 
         private void MixVoice(Voice v, int frames)
         {
@@ -473,7 +597,10 @@ namespace CalamityMusic.Audio
         private void MasterChain(float[] output, int frames)
         {
             float volTarget = targetVolume;
-            float muffleTarget = muffle;
+            float lowCoef = 1f - (float)Math.Exp(-1.0 / (SampleRate * 0.3));
+            float lowTarget = voices.Count > 0 ? lowHealth : 0f;
+            float muffleTarget = Math.Max(muffle, lowTarget * 0.5f);
+            const float TwoPi = (float)(Math.PI * 2);
             float volCoef = 1f - (float)Math.Exp(-1.0 / (SampleRate * 0.03));
             float muffleCoef = 1f - (float)Math.Exp(-1.0 / (SampleRate * 0.15));
             float bassLpCoef = 1f - (float)Math.Exp(-2 * Math.PI * 150.0 / SampleRate);
@@ -513,6 +640,35 @@ namespace CalamityMusic.Audio
                     muffleL.Reset();
                     muffleR.Reset();
                 }
+
+                // Low health: a "lub-dub" heartbeat that speeds up the closer the player is to death.
+                currentLow += (lowTarget - currentLow) * lowCoef;
+                if (currentLow > 0.01f)
+                {
+                    float bpm = 66f + 54f * currentLow;
+                    long period = (long)(SampleRate * 60f / bpm);
+                    long t = heartFrame % period;
+                    float thump = 0f;
+                    float ts = t / (float)SampleRate;
+                    if (ts < 0.2f)
+                    {
+                        heartPhaseL += (44f + 30f * (float)Math.Exp(-ts / 0.03f)) / SampleRate;
+                        thump += (float)Math.Sin(TwoPi * heartPhaseL) * (float)Math.Exp(-ts / 0.07f);
+                    }
+                    else heartPhaseL = 0f;
+                    float td = ts - 0.24f;
+                    if (td >= 0f && td < 0.2f)
+                    {
+                        heartPhaseD += (40f + 24f * (float)Math.Exp(-td / 0.03f)) / SampleRate;
+                        thump += 0.7f * (float)Math.Sin(TwoPi * heartPhaseD) * (float)Math.Exp(-td / 0.06f);
+                    }
+                    else heartPhaseD = 0f;
+                    thump *= currentLow * 0.55f;
+                    l += thump;
+                    r += thump;
+                    heartFrame++;
+                }
+                else heartFrame = 0;
 
                 // Analysis for the Now Playing glow (taken before volume so it reacts at any volume).
                 float mono = (l + r) * 0.5f;

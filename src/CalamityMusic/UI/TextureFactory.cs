@@ -119,6 +119,32 @@ namespace CalamityMusic.UI
             return tex;
         }
 
+        /// <summary>
+        /// A lens flare line: a hot point at the left end that thins and fades out to the right.
+        /// Mirrored with a negative x scale for the other side.
+        /// </summary>
+        public static Texture2D Flare(int width, int height)
+        {
+            var tex = NewTexture(width, height);
+            var px = new Color[width * height];
+            for (int y = 0; y < height; y++)
+            {
+                float v = Mathf.Abs((y + 0.5f) / height - 0.5f) * 2f;
+                for (int x = 0; x < width; x++)
+                {
+                    float u = (x + 0.5f) / width;
+                    float thickness = Mathf.Lerp(1f, 0.25f, u);         // thins out along its length
+                    float line = Mathf.Exp(-Mathf.Pow(v / thickness, 2f) * 5f);
+                    float along = Mathf.Pow(1f - u, 1.6f);
+                    float core = Mathf.Exp(-u * 40f) * Mathf.Exp(-v * v * 2f) * 0.8f;
+                    px[y * width + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(line * along + core));
+                }
+            }
+            tex.SetPixels(px);
+            tex.Apply(true, true);
+            return tex;
+        }
+
         // ------------------------------------------------------------------ particle sprites (white, tinted per use)
 
         public static Texture2D SoftDot(int size) => Radial(size, d => Mathf.Exp(-d * d * 4.5f));

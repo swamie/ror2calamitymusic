@@ -10,6 +10,7 @@ namespace CalamityMusic.Library
     {
         public const string Generic = "Generic";
         public const string Escape = "MoonEscape";
+        public const string BossRush = "BossRush";
 
         /// <summary>Area themes live in folders starting with this; they're stage music, never boss music.</summary>
         public const string BiomePrefix = "Biome_";

@@ -1,5 +1,6 @@
 using BepInEx.Configuration;
 using CalamityMusic.Library;
+using UnityEngine;
 
 namespace CalamityMusic
 {
@@ -57,6 +58,24 @@ namespace CalamityMusic
         public static ConfigEntry<bool> AnySongFallback;
         public static ConfigEntry<bool> MoonEscapeMusic;
 
+        // Boss fights
+        public static ConfigEntry<bool> FollowBossPhases;
+        public static ConfigEntry<bool> LastStand;
+        public static ConfigEntry<bool> SimulacrumBossRush;
+        public static ConfigEntry<bool> BossTitleCards;
+
+        // Effects
+        public static ConfigEntry<bool> TapeStopOnDeath;
+        public static ConfigEntry<bool> LowHealthEffect;
+
+        // Hotkeys
+        public static ConfigEntry<KeyboardShortcut> SkipKey;
+        public static ConfigEntry<KeyboardShortcut> FavoriteKey;
+        public static ConfigEntry<KeyboardShortcut> BanKey;
+
+        // Multiplayer
+        public static ConfigEntry<bool> MultiplayerSync;
+
         // Stage music
         public static ConfigEntry<bool> StageMusic;
         public static ConfigEntry<bool> MenuMusic;
@@ -80,9 +99,10 @@ namespace CalamityMusic
         public static void Bind(ConfigFile cfg)
         {
             const string G = "General";
-            Mode = cfg.Bind(G, "Music", MusicMode.Calamity,
+            Mode = cfg.Bind(G, "Music", MusicMode.Auto,
                 "Which music plays during teleporter events and boss fights.\n" +
-                "Vanilla = normal Risk of Rain 2 music. Calamity = Calamity songs. Infernum = Infernum versions where you have them, Calamity songs otherwise. Mixed = everything shuffled together.");
+                "Vanilla = normal Risk of Rain 2 music. Auto = Calamity songs, switching to Infernum on Monsoon and Eclipse. Calamity = Calamity songs. " +
+                "Infernum = Infernum versions where you have them, Calamity songs otherwise. Mixed = everything shuffled together.");
             Volume = cfg.Bind(G, "Music Volume", 70f, "Volume of the Calamity music, 0-100%.");
             FollowGameVolume = cfg.Bind(G, "Follow In-Game Volume", true,
                 "Also scale by the game's own Master and Music volume settings.");
@@ -109,6 +129,33 @@ namespace CalamityMusic
                 "If a boss has no songs in its theme folders (or in Generic), play any song from your library instead of the vanilla music.");
             MoonEscapeMusic = cfg.Bind(P, "Moon Escape Music", true,
                 "Play a song from the MoonEscape folder during the escape after Mithrix. If the folder is empty the vanilla escape music plays.");
+
+            const string F = "Boss Fights";
+            FollowBossPhases = cfg.Bind(F, "Follow Boss Phases", true,
+                "Multi-part songs follow the fight: Mithrix's phases move through Supreme Calamitas' theme, Voidling's through the Avatar's, False Son's too.");
+            LastStand = cfg.Bind(F, "Last Stand Kick", true,
+                "When the last boss drops below 25% health the music jumps to its final part, or hits harder if the song has no parts.");
+            SimulacrumBossRush = cfg.Bind(F, "Simulacrum Boss Rush", true,
+                "Play the Boss Rush tiers in the Simulacrum, climbing a tier every 10 waves. Needs songs in the BossRush folder.");
+            BossTitleCards = cfg.Bind(F, "Boss Title Cards", true,
+                "Show an Infernum-style title card with the boss's name when its theme drops.");
+
+            const string E = "Effects";
+            TapeStopOnDeath = cfg.Bind(E, "Tape Stop On Death", true,
+                "The music winds down like a stopped tape when you die, and spins back up if you're revived.");
+            LowHealthEffect = cfg.Bind(E, "Low Health Muffle", true,
+                "Below 25% health the music gets muffled and a heartbeat fades in.");
+
+            const string H = "Hotkeys";
+            SkipKey = cfg.Bind(H, "Skip Song", new KeyboardShortcut(KeyCode.F8), "Crossfade to another song for the same boss or stage.");
+            FavoriteKey = cfg.Bind(H, "Favourite Song", new KeyboardShortcut(KeyCode.F9),
+                "Favourite (or unfavourite) the song that's playing. Favourites come up three times as often. Saved in favorites.txt next to the Music folder.");
+            BanKey = cfg.Bind(H, "Ban Song", new KeyboardShortcut(KeyCode.F10),
+                "Never play this song again and skip it. Saved in banned.txt next to the Music folder; undo with Clear Banned Songs.");
+
+            const string M = "Multiplayer";
+            MultiplayerSync = cfg.Bind(M, "Sync With Host", true,
+                "When the host also has this mod, play the same song the host's game picked (if you have that file).");
 
             const string St = "Stage Music";
             StageMusic = cfg.Bind(St, "Stage Music", true,

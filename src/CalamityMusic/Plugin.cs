@@ -23,7 +23,7 @@ namespace CalamityMusic
     {
         public const string Guid = "com.swamie.calamitymusic";
         public const string ModName = "CalamityMusic";
-        public const string Version = "1.0.0";
+        public const string Version = "1.1.0";
         private const string Starstorm2Guid = "com.TeamMoonstorm.Starstorm2";
 
         private MusicEngine engine;
@@ -32,6 +32,8 @@ namespace CalamityMusic
         private StageThemes stageThemes;
         private MusicDirector director;
         private NowPlayingBanner banner;
+        private BossTitleCard titleCard;
+        private MusicSync sync;
         private Harmony harmony;
 
         private void Awake()
@@ -62,8 +64,20 @@ namespace CalamityMusic
 
             banner = gameObject.AddComponent<NowPlayingBanner>();
             banner.Init(() => engine.BassLevel);
+            titleCard = gameObject.AddComponent<BossTitleCard>();
+            titleCard.Init(() => engine.BassLevel);
+            sync = new MusicSync();
+            try
+            {
+                sync.Init();
+            }
+            catch (Exception e)
+            {
+                Log.Warning("Multiplayer music sync is unavailable: " + e.Message);
+                sync = null;
+            }
             director = gameObject.AddComponent<MusicDirector>();
-            director.Init(engine, library, themes, stageThemes, banner);
+            director.Init(engine, library, themes, stageThemes, banner, titleCard, sync);
 
             SetupSettingsMenu();
 
@@ -157,6 +171,24 @@ namespace CalamityMusic
                 ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.AnySongFallback));
                 ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.MoonEscapeMusic));
 
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.FollowBossPhases));
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.LastStand));
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.SimulacrumBossRush));
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.BossTitleCards));
+                ModSettingsManager.AddOption(new GenericButtonOption("Test Title Card", "Boss Fights",
+                    "Shows a boss title card. Press again to see the next style.", "Show", director.ShowTestTitleCard));
+
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.TapeStopOnDeath));
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.LowHealthEffect));
+
+                ModSettingsManager.AddOption(new KeyBindOption(ModConfig.SkipKey));
+                ModSettingsManager.AddOption(new KeyBindOption(ModConfig.FavoriteKey));
+                ModSettingsManager.AddOption(new KeyBindOption(ModConfig.BanKey));
+                ModSettingsManager.AddOption(new GenericButtonOption("Clear Banned Songs", "Hotkeys",
+                    "Unbans every song you banned with the Ban Song key.", "Clear", director.ClearBans));
+
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.MultiplayerSync));
+
                 ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.StageMusic));
                 ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.MenuMusic));
                 ModSettingsManager.AddOption(new SliderOption(ModConfig.StageVolume, new SliderConfig { min = 0f, max = 100f, FormatString = "{0:0}%" }));
@@ -242,6 +274,8 @@ namespace CalamityMusic
 
         private void Shutdown()
         {
+            sync?.Shutdown();
+            sync = null;
             VanillaMusic.Restore();
             engine?.Dispose();
             engine = null;

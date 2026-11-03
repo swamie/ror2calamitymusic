@@ -10,6 +10,7 @@ namespace CalamityMusic.Library
     internal enum MusicMode
     {
         Vanilla,
+        Auto,       // Calamity normally, Infernum on Monsoon / Eclipse (resolved by the director)
         Calamity,
         Infernum,
         Mixed,
@@ -49,9 +50,175 @@ namespace CalamityMusic.Library
         public int TrackCount => index.All.Count;
         public int BuildupCount => index.Buildups.Count;
 
+        private readonly HashSet<string> favorites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> banned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         public MusicLibrary(string root)
         {
             Root = root;
+            LoadList(FavoritesFile, favorites);
+            LoadList(BannedFile, banned);
+        }
+
+        // ------------------------------------------------------------------ favourites and bans
+
+        private string ListDir => Path.GetDirectoryName(Path.GetFullPath(Root)) ?? Root;
+        private string FavoritesFile => Path.Combine(ListDir, "favorites.txt");
+        private string BannedFile => Path.Combine(ListDir, "banned.txt");
+        public int BannedCount { get { lock (banned) return banned.Count; } }
+
+        /// <summary>Path relative to the Music folder with forward slashes ("Calamity/Yharon/DM DOKURO - ....ogg").</summary>
+        public string RelPath(TrackInfo t)
+        {
+            if (t == null) return null;
+            string full = Path.GetFullPath(t.Path), root = Path.GetFullPath(Root).TrimEnd('/', '\\') + Path.DirectorySeparatorChar;
+            string rel = full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? full.Substring(root.Length) : Path.GetFileName(full);
+            return rel.Replace('\\', '/');
+        }
+
+        public TrackInfo FindByRelPath(string rel)
+        {
+            if (string.IsNullOrEmpty(rel)) return null;
+            foreach (var t in index.All)
+                if (string.Equals(RelPath(t), rel, StringComparison.OrdinalIgnoreCase)) return t;
+            return null;
+        }
+
+        public bool IsFavorite(TrackInfo t)
+        {
+            lock (favorites) return t != null && favorites.Contains(RelPath(t));
+        }
+
+        /// <summary>Toggles a favourite (favourites are picked three times as often). Returns the new state.</summary>
+        public bool ToggleFavorite(TrackInfo t)
+        {
+            if (t == null) return false;
+            bool now;
+            lock (favorites)
+            {
+                string rel = RelPath(t);
+                now = !favorites.Remove(rel);
+                if (now) favorites.Add(rel);
+                SaveList(FavoritesFile, favorites);
+            }
+            return now;
+        }
+
+        /// <summary>Bans a song: it is never picked again (undo by editing banned.txt or Clear Banned Songs).</summary>
+        public void Ban(TrackInfo t)
+        {
+            if (t == null) return;
+            lock (banned)
+            {
+                banned.Add(RelPath(t));
+                SaveList(BannedFile, banned);
+            }
+        }
+
+        /// <summary>Bans every part of the song <paramref name="t"/> belongs to.</summary>
+        public void BanSong(TrackInfo t)
+        {
+            if (t == null) return;
+            var parts = PartsOf(t);
+            lock (banned)
+            {
+                banned.Add(RelPath(t));
+                if (parts != null) foreach (var p in parts) banned.Add(RelPath(p));
+                SaveList(BannedFile, banned);
+            }
+        }
+
+        public void ClearBans()
+        {
+            lock (banned)
+            {
+                banned.Clear();
+                SaveList(BannedFile, banned);
+            }
+        }
+
+        public bool IsBanned(TrackInfo t)
+        {
+            lock (banned) return banned.Count > 0 && banned.Contains(RelPath(t));
+        }
+
+        private static void LoadList(string file, HashSet<string> set)
+        {
+            try
+            {
+                if (!File.Exists(file)) return;
+                foreach (string line in File.ReadAllLines(file))
+                {
+                    string l = line.Trim();
+                    if (l.Length > 0 && !l.StartsWith("#")) set.Add(l.Replace('\\', '/'));
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Warning("Could not read " + file + ": " + e.Message);
+            }
+        }
+
+        private static void SaveList(string file, HashSet<string> set)
+        {
+            try
+            {
+                var lines = new List<string> { "# One song per line, relative to the Music folder. Delete a line to undo." };
+                lines.AddRange(set.OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+                File.WriteAllLines(file, lines);
+            }
+            catch (Exception e)
+            {
+                Log.Warning("Could not write " + file + ": " + e.Message);
+            }
+        }
+
+        // ------------------------------------------------------------------ multi-part songs
+
+        private List<TrackInfo> PartsOf(TrackInfo t)
+        {
+            if (t?.Sequence == null) return null;
+            if (!index.BySlot.TryGetValue(t.Slot, out var byPack) || !byPack.TryGetValue(t.Pack, out var list)) return null;
+            return list.Where(x => x.Sequence == t.Sequence).OrderBy(x => x.SequenceIndex).ToList();
+        }
+
+        /// <summary>How many parts the song <paramref name="t"/> belongs to has in its folder (1 for normal songs).</summary>
+        public int SequenceLength(TrackInfo t)
+        {
+            var parts = PartsOf(t);
+            return parts == null || parts.Count == 0 ? 1 : parts.Count;
+        }
+
+        /// <summary>The <paramref name="position"/>-th part (1-based, in order) of the song <paramref name="t"/> belongs to.</summary>
+        public TrackInfo PartAt(TrackInfo t, int position)
+        {
+            var parts = PartsOf(t);
+            if (parts == null || parts.Count == 0) return null;
+            return parts[Math.Max(0, Math.Min(parts.Count - 1, position - 1))];
+        }
+
+        /// <summary>1-based position of <paramref name="t"/> among its song's parts.</summary>
+        public int PartPosition(TrackInfo t)
+        {
+            var parts = PartsOf(t);
+            if (parts == null) return 1;
+            int i = parts.FindIndex(x => x.Path == t.Path);
+            return i < 0 ? 1 : i + 1;
+        }
+
+        /// <summary>
+        /// For tiered music like Boss Rush: the part numbered closest to (but not above) <paramref name="tier"/>
+        /// among the multi-part songs in <paramref name="slot"/>, or any song in that folder.
+        /// </summary>
+        public TrackInfo PickTier(string slot, int tier, MusicMode mode)
+        {
+            var idx = index;
+            var all = Collect(idx, new[] { slot }, PrimaryPacks(mode));
+            if (all.Count == 0) all = Collect(idx, new[] { slot }, FallbackPacks(mode));
+            if (all.Count == 0) return null;
+            var tiered = all.Where(t => t.Sequence != null && t.SequenceIndex <= tier).OrderByDescending(t => t.SequenceIndex).ToList();
+            if (tiered.Count > 0) return tiered[0];
+            return all[rng.Next(all.Count)];
         }
 
         // ------------------------------------------------------------------ folders
@@ -325,6 +492,7 @@ namespace CalamityMusic.Library
                 }
             }
             lock (badFiles) result.RemoveAll(t => badFiles.Contains(t.Path));
+            result.RemoveAll(IsBanned);
             return result;
         }
 
@@ -346,7 +514,7 @@ namespace CalamityMusic.Library
             if (candidates.Count == 0 && anySongFallback)
             {
                 // Any boss theme at all (never the escape song or calm area themes).
-                candidates = idx.All.Where(t => !t.Slot.Equals(Slots.Escape, StringComparison.OrdinalIgnoreCase) && !Slots.IsBiome(t.Slot)).ToList();
+                candidates = idx.All.Where(t => !t.Slot.Equals(Slots.Escape, StringComparison.OrdinalIgnoreCase) && !Slots.IsBiome(t.Slot) && !IsBanned(t)).ToList();
                 lock (badFiles) candidates.RemoveAll(t => badFiles.Contains(t.Path));
             }
             return Choose(candidates, string.Join(",", slots), avoid);
@@ -386,7 +554,11 @@ namespace CalamityMusic.Library
                 var fresh = candidates.Where(t => t.Path != last && (avoid == null || t.Path != avoid.Path)).ToList();
                 if (fresh.Count > 0) candidates = fresh;
             }
-            var pick = candidates[rng.Next(candidates.Count)];
+            // Favourites count three times.
+            var weighted = new List<TrackInfo>(candidates);
+            foreach (var t in candidates)
+                if (IsFavorite(t)) { weighted.Add(t); weighted.Add(t); }
+            var pick = weighted[rng.Next(weighted.Count)];
             lastPicked[key] = pick.Path;
             return pick;
         }

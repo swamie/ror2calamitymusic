@@ -61,9 +61,10 @@ namespace CalamityMusic.UI
         public static readonly BannerStyle Divine = S("Divine", "#FFFFFF", "#6B5A9E", "#FFF2B0", "#FFC9E8", "#0C0A14", ParticleKind.Petals, 10f);
         public static readonly BannerStyle Rift = S("Rift", "#FFE8E8", "#3A0A10", "#FF2A3A", "#FFFFFF", "#0A0002", ParticleKind.Void, 14f, glitch: true);
         public static readonly BannerStyle Abyss = S("Abyss", "#E6F0FF", "#0A1E4A", "#3C6BFF", "#7FE8FF", "#00030C", ParticleKind.Bubbles, 6f);
+        public static readonly BannerStyle BossRush = S("Boss Rush", "#FFFFFF", "#7A0A2A", "#FF3355", "#FFD23A", "#120008", ParticleKind.Sparks, 14f, lightning: true);
 
         public static readonly BannerStyle[] All =
-            { Default, Brimstone, HolyFire, Cosmic, Storm, Tech, Ocean, Toxic, Astral, Spectral, Frost, Blood, Fungal, Divine, Rift, Abyss };
+            { Default, Brimstone, HolyFire, Cosmic, Storm, Tech, Ocean, Toxic, Astral, Spectral, Frost, Blood, Fungal, Divine, Rift, Abyss, BossRush };
 
         private static readonly Dictionary<string, BannerStyle> BySlot = new Dictionary<string, BannerStyle>(StringComparer.OrdinalIgnoreCase)
         {
@@ -84,6 +85,7 @@ namespace CalamityMusic.UI
             ["Crabulon"] = Fungal, ["SlimeGod"] = Fungal, ["DesertScourge"] = Fungal, ["Goozma"] = Fungal,
             ["NamelessDeity"] = Divine, ["Biome_EternalGarden"] = Divine, ["Biome_Credits"] = Divine,
             ["Biome_Rift"] = Rift,
+            [Slots.BossRush] = BossRush,
         };
 
         private static readonly (string[] words, BannerStyle style)[] Keywords =
@@ -104,11 +106,14 @@ namespace CalamityMusic.UI
             (new[] { "rift", "eclipse" }, Rift),
         };
 
-        public static BannerStyle For(TrackInfo track)
+        public static BannerStyle For(TrackInfo track) => track == null ? Default : Find(track.Slot, track.Title);
+
+        public static BannerStyle ForSlot(string slot) => Find(slot, null);
+
+        private static BannerStyle Find(string slot, string title)
         {
-            if (track == null) return Default;
-            if (track.Slot != null && BySlot.TryGetValue(track.Slot, out var style)) return style;
-            string hay = ((track.Slot ?? "") + " " + (track.Title ?? "")).ToLowerInvariant();
+            if (slot != null && BySlot.TryGetValue(slot, out var style)) return style;
+            string hay = ((slot ?? "") + " " + (title ?? "")).ToLowerInvariant();
             foreach (var k in Keywords)
                 if (k.words.Any(w => hay.Contains(w))) return k.style;
             return Default;

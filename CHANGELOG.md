@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0
+
+- Boss title cards. The boss's name slams in at the top of the screen with its title, lens flares and themed particles when its theme drops.
+- Music follows boss phases. Mithrix's phases move through Supreme Calamitas' three parts, and Voidling and False Son work the same way. Each part loops until the fight moves on.
+- Last stand: below 25% health on the last boss the song jumps to its final part, or gets an impact hit and extra bass.
+- Auto mode: Calamity, switching to Infernum on Monsoon and Eclipse. It is the default for new installs; an existing config keeps the mode you picked.
+- Simulacrum Boss Rush. Tier 1 to 5, a tier every 10 waves, with a title card for each.
+- Tape stop when you die, spinning back up on revive or while spectating.
+- Low health muffle and heartbeat under 25% health.
+- Hotkeys: skip (F8), favourite (F9) and ban (F10), plus a Clear Banned Songs button. Favourites are picked three times as often.
+- Multiplayer sync: when the host has the mod, modded clients play the host's song picks.
+
 ## 1.0.0
 
 - First release.

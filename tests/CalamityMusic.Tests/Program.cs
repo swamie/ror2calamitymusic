@@ -65,10 +65,13 @@ namespace CalamityMusic.Tests
             Run("Bass boost", BassBoost);
             Run("Crossfade and stop", CrossfadeStop);
             Run("Song end events", SongEnd);
+            Run("Tape stop, heartbeat, impact", TapeAndHeart);
             Run("Broken files don't break the mixer", BrokenFiles);
             Run("Custom buildup files", CustomBuildup);
             Run("Multi-part songs", MultiPart);
             Run("Library folders and picking", LibraryTest);
+            Run("Favourites, bans, parts, tiers", LibraryExtras);
+            Run("Boss phases", PhasesTest);
             Run("Boss theme mapping", ThemesTest);
             Run("Stage music", StageMusicTest);
             Run("Now Playing styles", BannerStyleTest);
@@ -346,6 +349,67 @@ namespace CalamityMusic.Tests
             Check(ended.e.Kind == EngineEventKind.TrackEnded && ended.time > 7.9, $"TrackEnded at the end ({ended.time:0.00}s)");
         }
 
+        private static void TapeAndHeart()
+        {
+            // Tape stop: the song slows to a halt, stays paused, then spins back up where it left off.
+            var engine = new MusicEngine { Volume = 1f, BassBoostDb = 0f };
+            var rec = new Recorder(engine);
+            engine.Play(TrackInfo.FromFile(F("base.wav"), "Calamity", "A"), false, Transition.FadeIn(0.01f));
+            rec.WaitForLoad();
+            rec.Render(2.0);
+            engine.TapeStop(1.0f);
+            rec.Render(3.0); // 1 s slowing down + 2 s stopped
+            double before = rec.Rms(1.5, 2.0), during = rec.Rms(2.1, 2.6), stopped = rec.Rms(3.5, 5.0);
+            Check(during > 0.02 && stopped < 1e-4, $"tape slows then goes silent (rms {before:0.000} -> {during:0.000} -> {stopped:0.00000})");
+            engine.TapeStart(0.5f);
+            rec.Render(1.5);
+            Check(rec.Rms(5.6, 6.5) > before * 0.5, $"tape spins back up (rms {rec.Rms(5.6, 6.5):0.000})");
+            rec.Render(8.0);
+            var ended = rec.Events.FirstOrDefault(e => e.e.Kind == EngineEventKind.TrackEnded);
+            // 8 s file, ~2.5 s of playback "lost" to the stop: it should end around 10.5 s, not 8 s.
+            Check(ended.time > 9.8 && ended.time < 11.5, $"song paused during the stop and resumed in place (ended at {ended.time:0.00}s)");
+
+            // StopAll while stopped clears everything and resets the speed.
+            var e2 = new MusicEngine { Volume = 1f };
+            var r2 = new Recorder(e2);
+            e2.Play(TrackInfo.FromFile(F("base.wav"), "Calamity", "A"), true, Transition.FadeIn(0.01f));
+            r2.WaitForLoad();
+            r2.Render(1.5);
+            e2.TapeStop(0.3f);
+            r2.Render(1.0);
+            e2.StopAll(1f);
+            r2.Render(0.3);
+            Check(!e2.AnythingPlaying, "stopping during a tape stop releases everything");
+            e2.Play(TrackInfo.FromFile(F("base.wav"), "Calamity", "A"), true, Transition.FadeIn(0.01f));
+            r2.WaitForLoad();
+            r2.Render(1.5);
+            Check(r2.Rms(r2.Time - 1.0, r2.Time) > 0.05, "next song plays at normal speed");
+
+            // Heartbeat at low health (needs something playing; use near-silence).
+            string quiet = Path.Combine(outDir, "quiet.wav");
+            WriteWav(quiet, new List<float>(new float[SR * 2 * 6]));
+            double Heart(float low)
+            {
+                var e = new MusicEngine { Volume = 1f, BassBoostDb = 0f, LowHealth = low };
+                var r = new Recorder(e);
+                e.Play(TrackInfo.FromFile(quiet, "Calamity", "A"), true, Transition.FadeIn(0.01f));
+                r.WaitForLoad();
+                r.Render(3.0);
+                return r.Rms(1.5, 3.0);
+            }
+            double none = Heart(0f), heart = Heart(1f);
+            Check(none < 1e-5 && heart > 0.03, $"heartbeat only at low health (rms {none:0.00000} vs {heart:0.000})");
+
+            var e3 = new MusicEngine { Volume = 1f };
+            var r3 = new Recorder(e3);
+            e3.Play(TrackInfo.FromFile(quiet, "Calamity", "A"), true, Transition.FadeIn(0.01f));
+            r3.WaitForLoad();
+            r3.Render(0.5);
+            e3.PlayImpact(0.8f);
+            r3.Render(1.0);
+            Check(r3.Rms(0.55, 1.2) > 0.05, "standalone impact hit plays");
+        }
+
         private static void BrokenFiles()
         {
             // Half of a real OGG followed by junk: decodes fine for a while, then fails mid-stream.
@@ -507,6 +571,87 @@ namespace CalamityMusic.Tests
             Check(lib.Pick(new[] { "Cryogen" }, MusicMode.Calamity, null, false, out _) == null, "fallback can be turned off");
         }
 
+        private static void LibraryExtras()
+        {
+            string baseDir = Path.Combine(outDir, "extras");
+            if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
+            string root = Path.Combine(baseDir, "Music");
+            void Put(string rel)
+            {
+                string p2 = Path.Combine(root, rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(p2));
+                File.Copy(F("base.wav"), p2, true);
+            }
+            Put("Calamity/Yharon/A - One.wav");
+            Put("Calamity/Yharon/A - Two.wav");
+            Put("Calamity/Yharon/A - Three.wav");
+            for (int i = 1; i <= 5; i++) Put($"Calamity/BossRush/CDMusic - Boss Rush Tier {i} [seq=bossrush {i}].wav");
+            Put("Calamity/SupremeCalamitas/DM DOKURO - SBC [seq=scal 1].wav");
+            Put("Calamity/SupremeCalamitas/DM DOKURO - SBC [seq=scal 2].wav");
+            Put("Calamity/SupremeCalamitas/DM DOKURO - SBC [seq=scal 3].wav");
+            var lib = new MusicLibrary(root);
+            lib.Rescan();
+
+            var one = lib.Pick(new[] { "Yharon" }, MusicMode.Calamity, null, false, out _);
+            string rel = lib.RelPath(one);
+            Check(rel.StartsWith("Calamity/Yharon/") && lib.FindByRelPath(rel)?.Path == one.Path, $"relative paths round-trip ({rel})");
+
+            var two = lib.FindByRelPath("Calamity/Yharon/A - Two.wav");
+            Check(lib.ToggleFavorite(two) && lib.IsFavorite(two), "favourite toggled on");
+            int favHits = 0;
+            // With "don't repeat the last song", a favourite lands ~43% of picks vs ~33% normally.
+            for (int i = 0; i < 3000; i++) if (lib.Pick(new[] { "Yharon" }, MusicMode.Calamity, null, false, out _).Title == "Two") favHits++;
+            Check(favHits > 1150, $"favourites are picked more often ({favHits}/3000, ~1000 would be normal)");
+
+            var three = lib.FindByRelPath("Calamity/Yharon/A - Three.wav");
+            lib.Ban(three);
+            bool sawBanned = false;
+            for (int i = 0; i < 200; i++) if (lib.Pick(new[] { "Yharon" }, MusicMode.Calamity, null, false, out _).Title == "Three") sawBanned = true;
+            Check(!sawBanned && lib.BannedCount == 1, "banned song never picked");
+            var reloaded = new MusicLibrary(root);
+            reloaded.Rescan();
+            Check(reloaded.IsFavorite(reloaded.FindByRelPath("Calamity/Yharon/A - Two.wav")) && reloaded.BannedCount == 1, "favourites and bans persist");
+            reloaded.ClearBans();
+            Check(reloaded.BannedCount == 0 && File.ReadAllText(Path.Combine(baseDir, "banned.txt")).Split('\n').All(l => l.StartsWith("#") || l.Trim().Length == 0), "bans can be cleared");
+
+            var p1 = lib.FindByRelPath("Calamity/SupremeCalamitas/DM DOKURO - SBC [seq=scal 1].wav");
+            Check(lib.SequenceLength(p1) == 3 && lib.PartAt(p1, 3)?.SequenceIndex == 3 && lib.PartPosition(lib.PartAt(p1, 2)) == 2, "multi-part lookups");
+            Check(lib.SequenceLength(one) == 1, "normal songs have one part");
+            Check(lib.PickTier("BossRush", 1, MusicMode.Calamity)?.SequenceIndex == 1 && lib.PickTier("BossRush", 3, MusicMode.Calamity)?.SequenceIndex == 3
+                  && lib.PickTier("BossRush", 9, MusicMode.Calamity)?.SequenceIndex == 5, "Boss Rush tier picking");
+
+            // Banning a multi-part song bans all of its parts, so a fight never starts on part 2.
+            lib.BanSong(lib.PartAt(p1, 2));
+            bool sawScal = false;
+            for (int i = 0; i < 50; i++) if (lib.Pick(new[] { "SupremeCalamitas" }, MusicMode.Calamity, null, false, out _) != null) sawScal = true;
+            Check(!sawScal && lib.IsBanned(p1) && lib.IsBanned(lib.PartAt(p1, 3)), "banning a song bans every part");
+            lib.ClearBans();
+            Check(lib.Pick(new[] { "SupremeCalamitas" }, MusicMode.Calamity, null, false, out _)?.SequenceIndex == 1, "unbanned song starts at part 1 again");
+        }
+
+        private static void PhasesTest()
+        {
+            Check(BossPhases.PartForPhase(1, 4, 3) == 1 && BossPhases.PartForPhase(2, 4, 3) == 2
+                  && BossPhases.PartForPhase(3, 4, 3) == 2 && BossPhases.PartForPhase(4, 4, 3) == 3, "Mithrix's 4 phases over 3 parts: 1, 2, 2, 3");
+            Check(BossPhases.PartForPhase(1, 3, 2) == 1 && BossPhases.PartForPhase(2, 3, 2) == 2 && BossPhases.PartForPhase(3, 3, 2) == 2, "3 phases over 2 parts");
+            Check(BossPhases.PartForPhase(2, 3, 3) == 2 && BossPhases.PartForPhase(3, 3, 5) == 5, "phases spread to the last part");
+            Check(BossPhases.PartForPhase(4, 4, 1) == 1 && BossPhases.PartForPhase(9, 4, 3) == 3 && BossPhases.PartForPhase(0, 4, 3) == 1, "out-of-range phases clamp");
+
+            Check(BossPhases.FromBodyName("MiniVoidRaidCrabBodyPhase2", out int p, out int n) && p == 2 && n == 3, "Voidling phase from body");
+            Check(BossPhases.FromBodyName("FalseSonBossBody", out p, out n) && p == 1 && n == 3, "False Son phase 1");
+            Check(BossPhases.FromBodyName("FalseSonBossBodyLunarShard", out p, out _) && p == 2, "False Son phase 2");
+            Check(BossPhases.FromBodyName("FalseSonBossBodyBrokenLunarShard", out p, out _) && p == 3, "False Son phase 3");
+            Check(BossPhases.FromBodyName("BrotherHurtBody", out p, out n) && p == 4 && n == 4, "hurt Mithrix is his last phase");
+            Check(!BossPhases.FromBodyName("BrotherBody", out _, out _) && !BossPhases.FromBodyName("TitanBody", out _, out _), "no phase from plain bodies");
+            Check(BossPhases.FromBrotherState("Phase3") == 3 && BossPhases.FromBrotherState("PreEncounter") == 0 && BossPhases.FromBrotherState("BossDeath") == 0, "Mithrix encounter states");
+            Check(BossPhases.Family("BrotherHurtBody") == "BrotherBody" && BossPhases.Family("MiniVoidRaidCrabBodyPhase3") == "MiniVoidRaidCrabBody"
+                  && BossPhases.Family("FalseSonBossBodyLunarShard") == "FalseSonBossBody" && BossPhases.Family("TitanBody") == "TitanBody", "one title card per boss");
+
+            Check(BossPhases.BossRushTier(0) == 1 && BossPhases.BossRushTier(1) == 1 && BossPhases.BossRushTier(10) == 1
+                  && BossPhases.BossRushTier(11) == 2 && BossPhases.BossRushTier(35) == 4 && BossPhases.BossRushTier(41) == 5 && BossPhases.BossRushTier(400) == 5,
+                  "Simulacrum waves to Boss Rush tiers");
+        }
+
         private static void ThemesTest()
         {
             string dir = Path.Combine(outDir, "cfg");
@@ -591,7 +736,9 @@ namespace CalamityMusic.Tests
             Check(CalamityMusic.UI.BannerStyles.For(T("Biome_SunkenSea")).Name == "Ocean", "Sunken Sea -> ocean bubbles");
             Check(CalamityMusic.UI.BannerStyles.For(T("Generic")).Name == "Infernum", "Generic keeps the Infernum look");
             Check(CalamityMusic.UI.BannerStyles.For(T("MyFrostBoss")).Name == "Frost", "custom folders guessed from their name");
-            var unstyled = Slots.All.Where(sd => sd.Name != Slots.Generic && sd.Name != Slots.Title && sd.Name != "BossRush"
+            Check(CalamityMusic.UI.BannerStyles.For(T(Slots.BossRush)).Name == "Boss Rush" && CalamityMusic.UI.BannerStyles.BossRush.Lightning, "Boss Rush style");
+            Check(CalamityMusic.UI.BannerStyles.ForSlot("Yharon").Name == "Holy Fire", "style by slot name (title cards)");
+            var unstyled = Slots.All.Where(sd => sd.Name != Slots.Generic && sd.Name != Slots.Title
                 && CalamityMusic.UI.BannerStyles.For(T(sd.Name)) == CalamityMusic.UI.BannerStyles.Default).Select(sd => sd.Name).ToList();
             Check(unstyled.Count == 0, "every boss/area folder has its own style: " + string.Join(", ", unstyled));
             Check(CalamityMusic.UI.BannerStyles.ThemeName(T("SupremeCalamitas")) == "Supreme Witch, Calamitas", "theme name for a boss");
