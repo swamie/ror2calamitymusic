@@ -71,6 +71,7 @@ namespace CalamityMusic.Tests
             Run("Library folders and picking", LibraryTest);
             Run("Boss theme mapping", ThemesTest);
             Run("Stage music", StageMusicTest);
+            Run("Now Playing styles", BannerStyleTest);
 
             Console.WriteLine();
             Console.WriteLine(failures == 0 ? $"ALL {checks} CHECKS PASSED" : $"{failures} of {checks} CHECKS FAILED");
@@ -578,6 +579,28 @@ namespace CalamityMusic.Tests
             Check(any.SetEquals(new[] { "void", "sanctuary" }), "missing area theme falls back to other area themes, never the menu or a boss song: " + string.Join(", ", any));
             Check(lib.Pick(new[] { "Cryogen" }, MusicMode.Calamity, null, true, out _)?.Title == "Stained, Brutal Calamity", "boss fallback never picks calm area themes");
             Check(lib.RandomFilledSlot(MusicMode.Calamity) == "SupremeCalamitas", "preview uses boss themes only");
+        }
+
+        private static void BannerStyleTest()
+        {
+            TrackInfo T(string slot, string pack = "Calamity") => TrackInfo.FromFile("x/DM DOKURO - Song.ogg", pack, slot);
+            Check(CalamityMusic.UI.BannerStyles.For(T("SupremeCalamitas")).Name == "Brimstone", "Supreme Calamitas -> brimstone embers");
+            Check(CalamityMusic.UI.BannerStyles.For(T("DevourerOfGods")).Name == "Cosmic", "Devourer of Gods -> cosmic void");
+            Check(CalamityMusic.UI.BannerStyles.For(T("ExoMechs")).Glitch, "Exo Mechs glitch");
+            Check(CalamityMusic.UI.BannerStyles.For(T("StormWeaver")).Lightning, "Storm Weaver lightning");
+            Check(CalamityMusic.UI.BannerStyles.For(T("Biome_SunkenSea")).Name == "Ocean", "Sunken Sea -> ocean bubbles");
+            Check(CalamityMusic.UI.BannerStyles.For(T("Generic")).Name == "Infernum", "Generic keeps the Infernum look");
+            Check(CalamityMusic.UI.BannerStyles.For(T("MyFrostBoss")).Name == "Frost", "custom folders guessed from their name");
+            var unstyled = Slots.All.Where(sd => sd.Name != Slots.Generic && sd.Name != Slots.Title && sd.Name != "BossRush"
+                && CalamityMusic.UI.BannerStyles.For(T(sd.Name)) == CalamityMusic.UI.BannerStyles.Default).Select(sd => sd.Name).ToList();
+            Check(unstyled.Count == 0, "every boss/area folder has its own style: " + string.Join(", ", unstyled));
+            Check(CalamityMusic.UI.BannerStyles.ThemeName(T("SupremeCalamitas")) == "Supreme Witch, Calamitas", "theme name for a boss");
+            Check(CalamityMusic.UI.BannerStyles.ThemeName(T("Biome_SulphurousSea")) == "Sulphurous Sea", "theme name for an area, note trimmed");
+            Check(CalamityMusic.UI.BannerStyles.ThemeName(T("AvatarOfEmptiness", "Extensions")) == "Avatar of Emptiness", "add-on name trimmed");
+            Check(CalamityMusic.UI.BannerStyles.ThemeName(T("MyCoolBoss")) == "My Cool Boss", "custom folder name made readable");
+            Check(CalamityMusic.UI.BannerStyles.ThemeName(T("Generic")) == null, "no subtitle for Generic");
+            foreach (var st in CalamityMusic.UI.BannerStyles.All)
+                Check(new[] { st.Fill, st.Outline, st.Glow, st.Accent, st.Backdrop }.All(h => System.Text.RegularExpressions.Regex.IsMatch(h, "^#[0-9A-Fa-f]{6}$")), $"{st.Name} colours are valid hex");
         }
 
         // ------------------------------------------------------------------ helpers

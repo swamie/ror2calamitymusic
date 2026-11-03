@@ -6,7 +6,18 @@ Turns every teleporter event and boss fight into a Calamity boss fight.
 - Stage music too: every stage, the menus, the Bazaar, the Void, hidden realms and DLC stages play a Calamity area theme. The Sulfur Pools get the Sulphurous Sea, Abyssal Depths and the Void get the Abyss, Scorched Acres get the Brimstone Crags, and so on. After a boss fight the boss theme crossfades back into the stage's theme.
 - Every Risk of Rain 2 boss has its own matching theme. Mithrix gets Supreme Calamitas, the Wandering Vagrant (a jellyfish) gets the aquatic Leviathan and Anahita theme, the Overloading Worm gets the Storm Weaver, and so on. Bosses can have several themes and one is picked at random each fight.
 - Calamity, Infernum and Mixed modes. Infernum mode uses the Infernum version of a theme when you have one and the normal Calamity song when you don't, just like the real mod. Set it to Vanilla to get the normal Risk of Rain music back.
-- A "Now Playing" banner in the style of the Calamity/Infernum music display (white text, blue outline, teal glow, music note) slides in when a theme starts and pulses with the bass.
+- A "Now Playing" banner in the style of the Calamity/Infernum music display pops up in the bottom left (away from your abilities). Every boss and area has its own look:
+  - Calamitas and the Brimstone themes: embers.
+  - Yharon and Providence: golden holy fire.
+  - The Devourer of Gods: cosmic particles pulled into a void.
+  - Storm Weaver: lightning.
+  - Exo Mechs: glitch flickers.
+  - Ocean themes: bubbles.
+  - Sulphurous Sea: toxic drips.
+  - Cryogen: snow.
+  - Eternal Garden: petals.
+
+  The letters pop in one by one, a light sweeps across them and they bump to the bass. The boss or area name sits underneath the title.
 - Live bass boost with a limiter so it hits hard without clipping.
 - Starstorm 2 support (Wayfarer, Nemesis Commando, Nemesis Mercenary, Empyrean elites), plus automatic theme guesses for any other modded boss.
 - Works in multiplayer. It runs on your own game only, nobody else needs it installed.
@@ -161,7 +172,7 @@ Everything is in **Settings > Mod Options > Calamity Music**:
 - **Teleporter Buildup**: on/off, synth or your own buildup files, length, and how loud the drop impact is.
 - **Teleporter Music Ends When**: keep the theme going until the teleporter is fully charged (default) or stop when the boss dies.
 - **When A Song Ends**: loop it seamlessly, or crossfade into another song for the same boss.
-- **Now Playing**: on/off, how long it stays, position, size and the bass pulse. "Test Banner" shows it.
+- **Now Playing**: on/off, how long it stays, position (bottom left by default), fine offsets, size, effects, the boss/area name line and the bass pulse. "Test Banner" shows it, and each press shows the next boss/area style.
 
 While Calamity music plays the game's own music is faded out, and it fades back in afterwards. Your music volume setting is never changed.
 

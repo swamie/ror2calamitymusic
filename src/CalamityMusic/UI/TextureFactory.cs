@@ -119,6 +119,96 @@ namespace CalamityMusic.UI
             return tex;
         }
 
+        // ------------------------------------------------------------------ particle sprites (white, tinted per use)
+
+        public static Texture2D SoftDot(int size) => Radial(size, d => Mathf.Exp(-d * d * 4.5f));
+
+        public static Texture2D Ring(int size) => Radial(size, d =>
+        {
+            float ring = Mathf.Exp(-Mathf.Pow((d - 0.72f) / 0.12f, 2f));
+            float shine = d < 0.5f ? 0.12f * (1f - d / 0.5f) : 0f;
+            return Mathf.Clamp01(ring + shine);
+        });
+
+        /// <summary>Four-point sparkle with a soft core.</summary>
+        public static Texture2D Sparkle(int size)
+        {
+            return Shape(size, (x, y) =>
+            {
+                float d = Mathf.Sqrt(x * x + y * y);
+                float core = Mathf.Exp(-d * d * 18f);
+                float arms = Mathf.Exp(-Mathf.Abs(x) * 26f) * Mathf.Exp(-Mathf.Abs(y) * 2.6f)
+                           + Mathf.Exp(-Mathf.Abs(y) * 26f) * Mathf.Exp(-Mathf.Abs(x) * 2.6f);
+                return Mathf.Clamp01(core + arms * 0.9f);
+            });
+        }
+
+        /// <summary>Six-armed snowflake.</summary>
+        public static Texture2D Flake(int size)
+        {
+            return Shape(size, (x, y) =>
+            {
+                float d = Mathf.Sqrt(x * x + y * y);
+                if (d > 1f) return 0f;
+                float a = Mathf.Atan2(y, x);
+                float arm = Mathf.Abs(Mathf.Sin(a * 3f)); // 0 on the six arms
+                float line = Mathf.Exp(-Mathf.Pow(arm * d * 9f, 2f)) * (1f - d);
+                float twig = Mathf.Exp(-Mathf.Pow(Mathf.Abs(Mathf.Sin(a * 3f + 0.9f)) * d * 12f, 2f)) * Mathf.Exp(-Mathf.Pow((d - 0.55f) * 6f, 2f));
+                return Mathf.Clamp01(line * 1.4f + twig * 0.8f + Mathf.Exp(-d * d * 30f));
+            });
+        }
+
+        /// <summary>Crisp square pixel.</summary>
+        public static Texture2D Square(int size)
+        {
+            return Shape(size, (x, y) => Mathf.Max(Mathf.Abs(x), Mathf.Abs(y)) < 0.8f ? 1f : 0f, false);
+        }
+
+        /// <summary>Vertical streak, bright in the middle, for sparks and drips.</summary>
+        public static Texture2D Streak(int width, int height)
+        {
+            var tex = NewTexture(width, height);
+            var px = new Color[width * height];
+            for (int y = 0; y < height; y++)
+            {
+                float v = (y + 0.5f) / height * 2f - 1f;
+                for (int x = 0; x < width; x++)
+                {
+                    float u = (x + 0.5f) / width * 2f - 1f;
+                    float a = Mathf.Exp(-u * u * 6f) * Mathf.Pow(Mathf.Clamp01(1f - Mathf.Abs(v)), 1.5f);
+                    px[y * width + x] = new Color(1f, 1f, 1f, a);
+                }
+            }
+            tex.SetPixels(px);
+            tex.Apply(true, true);
+            return tex;
+        }
+
+        private static Texture2D Radial(int size, System.Func<float, float> alphaAtDistance)
+        {
+            return Shape(size, (x, y) => alphaAtDistance(Mathf.Sqrt(x * x + y * y)));
+        }
+
+        /// <summary>Fills a white texture whose alpha comes from f(x, y) with x, y in [-1, 1].</summary>
+        private static Texture2D Shape(int size, System.Func<float, float, float> f, bool smooth = true)
+        {
+            var tex = NewTexture(size, size);
+            if (!smooth) tex.filterMode = FilterMode.Point;
+            var px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                float v = (y + 0.5f) / size * 2f - 1f;
+                for (int x = 0; x < size; x++)
+                {
+                    float u = (x + 0.5f) / size * 2f - 1f;
+                    px[y * size + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(f(u, v)));
+                }
+            }
+            tex.SetPixels(px);
+            tex.Apply(true, true);
+            return tex;
+        }
+
         private static Texture2D NewTexture(int w, int h)
         {
             return new Texture2D(w, h, TextureFormat.RGBA32, true)

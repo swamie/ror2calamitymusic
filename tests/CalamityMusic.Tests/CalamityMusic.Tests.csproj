@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="../../src/CalamityMusic/Audio/*.cs" Link="Mod/Audio/%(Filename)%(Extension)" />
     <Compile Include="../../src/CalamityMusic/Library/*.cs" Link="Mod/Library/%(Filename)%(Extension)" />
+    <Compile Include="../../src/CalamityMusic/UI/BannerStyles.cs" Link="Mod/UI/BannerStyles.cs" />
   </ItemGroup>
 
   <ItemGroup>

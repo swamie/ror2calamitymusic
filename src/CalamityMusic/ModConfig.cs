@@ -69,6 +69,10 @@ namespace CalamityMusic
         public static ConfigEntry<BannerPosition> NowPlayingPosition;
         public static ConfigEntry<float> NowPlayingScale;
         public static ConfigEntry<bool> NowPlayingPulse;
+        public static ConfigEntry<float> NowPlayingOffsetX;
+        public static ConfigEntry<float> NowPlayingOffsetY;
+        public static ConfigEntry<bool> NowPlayingEffects;
+        public static ConfigEntry<bool> NowPlayingThemeName;
 
         // Advanced
         public static ConfigEntry<string> MusicFolderOverride;
@@ -116,7 +120,13 @@ namespace CalamityMusic
             const string N = "Now Playing";
             ShowNowPlaying = cfg.Bind(N, "Show Now Playing", true, "Show the song name banner when a boss theme starts.");
             NowPlayingSeconds = cfg.Bind(N, "Display Time", 6f, "Seconds the banner stays on screen.");
-            NowPlayingPosition = cfg.Bind(N, "Position", BannerPosition.TopCenter, "Where the banner appears.");
+            NowPlayingPosition = cfg.Bind(N, "Screen Position", BannerPosition.BottomLeft,
+                "Where the banner appears. BottomLeft sits just above the health bar, away from the abilities in the bottom right.");
+            NowPlayingOffsetX = cfg.Bind(N, "Offset X", 0f, "Nudge the banner sideways, in pixels at 1080p.");
+            NowPlayingOffsetY = cfg.Bind(N, "Offset Y", 0f, "Nudge the banner up (+) or down (-), in pixels at 1080p.");
+            NowPlayingEffects = cfg.Bind(N, "Effects", true,
+                "Per-song effects: particles themed to the boss or area (embers, bubbles, snow, stars, glitches, lightning...), letters popping in, light sweeps.");
+            NowPlayingThemeName = cfg.Bind(N, "Show Boss Or Area Name", true, "Show which boss or area the song belongs to under the title.");
             NowPlayingScale = cfg.Bind(N, "Scale", 100f, "Banner size in %.");
             NowPlayingPulse = cfg.Bind(N, "Pulse With Bass", true, "Make the banner glow and bump to the bass.");
 

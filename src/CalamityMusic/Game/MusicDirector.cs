@@ -677,7 +677,7 @@ namespace CalamityMusic.Game
                         if (e.Message == "loop" || state == State.Ending || e.Track == null) break;
                         if (state == State.Idle && !(ambientActive && ModConfig.ShowStageNowPlaying.Value)) break;
                         // Later parts of a multi-part song carry straight on; the banner already showed the title.
-                        if (ModConfig.ShowNowPlaying.Value && !library.IsContinuation(e.Track)) banner.Show(e.Track.Display);
+                        if (ModConfig.ShowNowPlaying.Value && !library.IsContinuation(e.Track)) banner.Show(e.Track);
                         break;
 
                     case EngineEventKind.TrackEnding:
@@ -783,7 +783,7 @@ namespace CalamityMusic.Game
 
         public void ShowTestBanner()
         {
-            banner.Show(currentTrack != null ? currentTrack.Display : "ENNWAY! - Edenic Whispers");
+            banner.ShowSample();
         }
     }
 }

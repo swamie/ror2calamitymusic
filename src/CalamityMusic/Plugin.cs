@@ -167,8 +167,12 @@ namespace CalamityMusic
                 ModSettingsManager.AddOption(new ChoiceOption(ModConfig.NowPlayingPosition));
                 ModSettingsManager.AddOption(new SliderOption(ModConfig.NowPlayingScale, new SliderConfig { min = 50f, max = 200f, FormatString = "{0:0}%" }));
                 ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.NowPlayingPulse));
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.NowPlayingEffects));
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.NowPlayingThemeName));
+                ModSettingsManager.AddOption(new StepSliderOption(ModConfig.NowPlayingOffsetX, new StepSliderConfig { min = -800f, max = 800f, increment = 5f, FormatString = "{0:0} px" }));
+                ModSettingsManager.AddOption(new StepSliderOption(ModConfig.NowPlayingOffsetY, new StepSliderConfig { min = -600f, max = 600f, increment = 5f, FormatString = "{0:0} px" }));
                 ModSettingsManager.AddOption(new GenericButtonOption("Test Banner", "Now Playing",
-                    "Shows the Now Playing banner so you can check its position and size.", "Show", director.ShowTestBanner));
+                    "Shows the Now Playing banner so you can check its position and size. Press again to see the next boss/area style.", "Show", director.ShowTestBanner));
             }
             catch (Exception e)
             {
