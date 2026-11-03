@@ -61,6 +61,9 @@ namespace CalamityMusic.Game
         private float previewEnd;
         private int failedLoads;
         private bool warnedThisStage;
+        private bool warnedNoAreaThemes;
+        private float stageStart;
+        private bool stageChecked;
         private bool runOver;
         private bool usingFileBuildup;
         private bool holdStarted;
@@ -166,6 +169,8 @@ namespace CalamityMusic.Game
             lastBody = null;
             lastAlive = false;
             warnedThisStage = false;
+            stageStart = Time.unscaledTime;
+            stageChecked = false;
             runOver = false;
             retryAfter = 0f;
             failedLoads = 0;
@@ -220,6 +225,12 @@ namespace CalamityMusic.Game
             UpdateLocalPlayer(now);
             HandleHotkeys(now);
             if (runOver && kind != Kind.Preview) return;
+
+            if (Run.instance && !stageChecked && now - stageStart > 6f)
+            {
+                stageChecked = true;
+                CheckSongsForStage();
+            }
 
             if (Run.instance && kind != Kind.Preview && UpdateBossRush(now, dt)) return;
 
@@ -627,13 +638,29 @@ namespace CalamityMusic.Game
             bassBonus = 0f;
         }
 
+        /// <summary>A few seconds into each stage: say so if there's nothing to play, instead of silently leaving the game's music on.</summary>
+        private void CheckSongsForStage()
+        {
+            if (library.TrackCount == 0)
+            {
+                LibraryEmpty();
+                return;
+            }
+            if (ModConfig.StageMusic.Value && !library.HasStageMusic && !warnedNoAreaThemes)
+            {
+                warnedNoAreaThemes = true;
+                banner.ShowHint("Stage music needs area themes. Settings > Mod Options > Calamity Music > Get Songs adds them.");
+                Log.Warning("Stage music is on, but no Biome_ folder has songs, so stages keep the game's own music. Get Songs fills them.");
+            }
+        }
+
         private bool LibraryEmpty()
         {
             if (library.TrackCount > 0) return false;
             if (!warnedThisStage)
             {
                 warnedThisStage = true;
-                banner.ShowHint("No Calamity songs found. Settings > Mod Options > Calamity Music > Open Music Folder");
+                banner.ShowHint("No Calamity songs yet. Settings > Mod Options > Calamity Music > Get Songs");
                 Log.Warning("No songs found in " + library.Root + ". See HOW_TO_ADD_SONGS.txt in that folder.");
             }
             return true;

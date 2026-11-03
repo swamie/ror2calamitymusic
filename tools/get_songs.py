@@ -341,18 +341,24 @@ def find_music_folders():
     tail = os.path.join("BepInEx", "config", "CalamityMusic", "Music")
     bases = []
     if sys.platform == "win32":
-        appdata = os.environ.get("APPDATA", "")
-        bases += glob.glob(os.path.join(appdata, "r2modmanPlus-local", "RiskOfRain2", "profiles", "*"))
-        bases += glob.glob(os.path.join(appdata, "Thunderstore Mod Manager", "DataFolder", "RiskOfRain2", "profiles", "*"))
+        roots = [os.environ.get("APPDATA", ""), os.environ.get("LOCALAPPDATA", "")]
     else:
-        home = os.path.expanduser("~")
-        bases += glob.glob(os.path.join(home, ".config", "r2modmanPlus-local", "RiskOfRain2", "profiles", "*"))
-        bases += glob.glob(os.path.join(home, ".config", "Thunderstore Mod Manager", "DataFolder", "RiskOfRain2", "profiles", "*"))
+        roots = [os.path.join(os.path.expanduser("~"), ".config")]
+    for root in filter(None, roots):
+        # r2modman, Thunderstore Mod Manager and the newer Thunderstore app all keep profiles in
+        # <app folder>[/DataFolder]/RiskOfRain2/profiles/<profile>.
+        bases += glob.glob(os.path.join(root, "*", "RiskOfRain2", "profiles", "*"))
+        bases += glob.glob(os.path.join(root, "*", "*", "RiskOfRain2", "profiles", "*"))
     for lib in steam_libraries():
         bases.append(os.path.join(lib, "steamapps", "common", "Risk of Rain 2"))
 
     found = []
+    seen = set()
     for base in bases:
+        key = os.path.normcase(os.path.abspath(base))
+        if key in seen:
+            continue
+        seen.add(key)
         music = os.path.join(base, tail)
         if os.path.isdir(music) or glob.glob(os.path.join(base, "BepInEx", "plugins", "*CalamityMusic*")):
             found.append(music)
@@ -626,8 +632,9 @@ def choose_music_folder(arg):
         pick = ask("Which one? [1] ", "1")
         if pick.isdigit() and 1 <= int(pick) <= len(found):
             return found[int(pick) - 1]
-    say("Couldn't find the CalamityMusic mod. Install it with r2modman and start the game once,")
-    say("or paste the path to BepInEx/config/CalamityMusic/Music.")
+    say("Couldn't find the CalamityMusic mod. Install it in your mod manager and start the game once,")
+    say("or paste the path to BepInEx/config/CalamityMusic/Music (in the mod manager: Settings > Browse profile folder).")
+    say("Easiest of all: in game, Settings > Mod Options > Calamity Music > Get Songs knows the folder already.")
     path = ask("Music folder: ")
     return os.path.abspath(path) if path else None
 
