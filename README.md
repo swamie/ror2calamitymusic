@@ -193,6 +193,7 @@ While Calamity music plays the game's own music is faded out, and it fades back 
 - **Too loud / too much bass**: lower Bass Boost or the Drop Impact. 6 to 8 dB is a good range.
 - **Banner in the way**: change its position or turn it off under Now Playing.
 - **Multi-part songs don't follow the fight**: they only can when the parts are tagged, like the files Get Songs makes (`[seq=scal 1]`, `[seq=scal 2]`...). The full single-file version of a song just plays through.
+- **"Unknown message ID 23571" in a host's log**: that's the sync hello from a player with this mod, reaching a host who doesn't have it. It is sent on its own a few seconds after joining so nothing else is affected, and it's harmless. Turn off Sync With Host to stop it.
 - **Hotkeys do nothing**: they're ignored while you're typing in chat. Check they aren't bound to something else under Hotkeys.
 
 ## Building from source

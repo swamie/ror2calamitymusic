@@ -14,13 +14,17 @@ namespace CalamityMusic.Game
     /// clients play that file instead of their own random pick when they have it.
     ///
     /// Clients say hello first, and the host only ever messages connections that did, so players
-    /// without the mod never receive a message type they don't know.
+    /// without the mod never receive a message type they don't know. The hello itself does reach
+    /// hosts without the mod. UNET drops the rest of a packet after an unknown message, so the hello
+    /// waits until the join has settled and goes out alone, flushed before and after. A host without
+    /// the mod just logs one "Unknown message ID" line.
     /// </summary>
     internal sealed class MusicSync
     {
         private const short MsgHello = 23571; // client -> host: "I have the mod"
         private const short MsgPlay = 23572;  // host -> clients: "context\nrelative/path.ogg"
         private const float ChoiceLifetime = 20f;
+        private const float HelloDelay = 5f; // after connecting, so the game's own join messages are long gone
 
         private struct Choice
         {
@@ -34,6 +38,8 @@ namespace CalamityMusic.Game
         private readonly Queue<KeyValuePair<string, string>> arrived = new Queue<KeyValuePair<string, string>>();
         private NetworkClient client;
         private bool serverHandlerRegistered;
+        private NetworkConnection helloConn;
+        private float helloAt = -1f;
 
         /// <summary>The host's pick arrived on a client: (context, relative path). Raised on the main thread from Poll.</summary>
         public event Action<string, string> HostChoiceArrived;
@@ -145,16 +151,31 @@ namespace CalamityMusic.Game
         private void OnStopClient()
         {
             client = null;
+            helloConn = null;
+            helloAt = -1f;
             lock (gate) hostChoices.Clear();
         }
 
         private void OnClientConnect(NetworkConnection conn)
         {
             // The host's own client is local; only remote clients announce themselves.
-            if (NetworkServer.active || conn == null) return;
+            if (NetworkServer.active || conn == null || !Enabled) return;
+            helloConn = conn;
+            helloAt = Time.unscaledTime + HelloDelay;
+        }
+
+        private void SendHello()
+        {
+            var conn = helloConn;
+            helloConn = null;
+            helloAt = -1f;
+            if (conn == null || !conn.isConnected || NetworkServer.active || !Enabled) return;
             try
             {
+                // Alone in its packet: a host without the mod throws away whatever shares a packet with it.
+                conn.FlushChannels();
                 conn.Send(MsgHello, new StringMessage(CalamityMusicPlugin.Version));
+                conn.FlushChannels();
             }
             catch (Exception e)
             {
@@ -192,9 +213,10 @@ namespace CalamityMusic.Game
             }
         }
 
-        /// <summary>Delivers host picks that arrived since the last frame.</summary>
+        /// <summary>Sends a due hello and delivers host picks that arrived since the last frame.</summary>
         public void Poll()
         {
+            if (helloAt >= 0f && Time.unscaledTime >= helloAt) SendHello();
             while (true)
             {
                 KeyValuePair<string, string> item;

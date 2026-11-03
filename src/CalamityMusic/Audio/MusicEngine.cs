@@ -264,6 +264,9 @@ namespace CalamityMusic.Audio
                 {
                     // Cut the buildup, leave a short breath of silence, then slam in the song and the impact.
                     FadeOutKinds(0.045f, VoiceKind.Buildup, VoiceKind.Music);
+                    // A drop replacing one still in its gap takes over its impact too, so it never hits twice.
+                    foreach (var other in voices)
+                        if (other.Kind == VoiceKind.OneShot && !other.Started && other.StartDelay > 0) other.Finished = true;
                     int delay = (int)(SampleRate * t.GapSeconds);
                     v.StartDelay = delay;
                     v.Fade = 0f;
@@ -372,6 +375,12 @@ namespace CalamityMusic.Audio
             for (int i = 0; i < voices.Count; i++)
             {
                 var v = voices[i];
+                if (v.Finished)
+                {
+                    // Stopped from outside (StopAll during a tape stop, a dropped pending voice): never mix it again.
+                    v.FramesThisBlock = -1;
+                    continue;
+                }
                 try
                 {
                     MixVoice(v, frames);
@@ -647,7 +656,10 @@ namespace CalamityMusic.Audio
                 {
                     float bpm = 66f + 54f * currentLow;
                     long period = (long)(SampleRate * 60f / bpm);
-                    long t = heartFrame % period;
+                    // Position inside the current beat; the period changes as health does, so wrap instead of using modulo.
+                    if (heartFrame >= period) heartFrame -= period;
+                    if (heartFrame >= period) heartFrame = 0;
+                    long t = heartFrame;
                     float thump = 0f;
                     float ts = t / (float)SampleRate;
                     if (ts < 0.2f)

@@ -134,7 +134,12 @@ namespace CalamityMusic.Game
         {
             // Let the game-over screen have its own music; nothing new starts until the next stage/run.
             runOver = true;
-            tapeStopped = false; // stopping the music below also resets the tape
+            if (tapeStopped)
+            {
+                // Dead and wound down: cut what's left (StopAll also resets the tape speed).
+                tapeStopped = false;
+                engine.StopAll(0.1f);
+            }
             if (state != State.Idle && kind != Kind.Preview) End(Time.unscaledTime);
             else if (ambientActive) StopAmbient(2f);
         }
@@ -503,7 +508,7 @@ namespace CalamityMusic.Game
                     break;
 
                 case State.Ending:
-                    if (dominant != null && kind != Kind.Preview && Run.instance)
+                    if (dominant != null && kind != Kind.Preview && Run.instance && now >= retryAfter)
                     {
                         var d = dominant.Value;
                         StartEncounter(d.Theme, d.FromTeleporter ? Kind.Teleporter : Kind.Encounter, now, Transition.Drop(ImpactStrength, 0.03f));
@@ -1008,28 +1013,35 @@ namespace CalamityMusic.Game
         /// <summary>Client: the host picked a different song for what we're playing now; follow it if we have the file.</summary>
         private void OnHostChoice(string context, string rel)
         {
-            if (context == null || context != currentContext || engine.ActiveMusicVoice == 0) return;
+            if (context == null || context != currentContext) return;
             if (state != State.Playing && !(state == State.Idle && ambientActive)) return;
             var t = library.FindByRelPath(rel);
             if (t == null || library.IsBanned(t) || currentTrack == null) return;
             if (t.Path == currentTrack.Path || SameSong(t, currentTrack)) return;
 
+            // Our own pick may still be loading (both games drop at about the same moment): then the
+            // host's song takes over the drop itself instead of crossfading in afterwards.
+            bool notStarted = engine.ActiveMusicVoice == 0;
+            var transition = notStarted
+                ? (state == State.Playing && kind != Kind.Escape ? Transition.Drop(ImpactStrength, 0.02f) : Transition.FadeIn(0.5f))
+                : Transition.Crossfade(1.5f);
+
             if (state == State.Idle)
             {
-                PlayTrack(t, LoopSongs, Transition.Crossfade(1.5f), true, context);
+                PlayTrack(t, LoopSongs, transition, true, context);
                 ambientTrack = t;
             }
             else if (kind == Kind.BossRush)
             {
-                PlayTrack(t, true, Transition.Crossfade(1.5f), false, context);
+                PlayTrack(t, true, transition, false, context);
             }
             else if (kind == Kind.Escape)
             {
-                PlayTrack(t, true, Transition.Crossfade(1.5f), true, context);
+                PlayTrack(t, true, transition, true, context);
             }
             else
             {
-                PlayBossTrack(t, Transition.Crossfade(1.5f), context);
+                PlayBossTrack(t, transition, context);
             }
             Log.Info("Following the host's song: " + t);
         }
@@ -1288,7 +1300,10 @@ namespace CalamityMusic.Game
                         if (state == State.Playing && failedLoads++ < 3)
                             PlayNext(Transition.Drop(0f, 0.02f));
                         else if (state == State.Playing)
+                        {
+                            retryAfter = now + 15f; // don't jump straight back into the same broken songs
                             End(now);
+                        }
                         break;
                 }
             }

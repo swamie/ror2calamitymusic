@@ -377,9 +377,11 @@ namespace CalamityMusic.Tests
             r2.Render(1.5);
             e2.TapeStop(0.3f);
             r2.Render(1.0);
+            double stopAt = r2.Time;
             e2.StopAll(1f);
             r2.Render(0.3);
             Check(!e2.AnythingPlaying, "stopping during a tape stop releases everything");
+            Check(r2.Rms(stopAt, stopAt + 0.3) < 1e-4, $"no burst of the song when it's stopped mid tape stop (rms {r2.Rms(stopAt, stopAt + 0.3):0.00000})");
             e2.Play(TrackInfo.FromFile(F("base.wav"), "Calamity", "A"), true, Transition.FadeIn(0.01f));
             r2.WaitForLoad();
             r2.Render(1.5);
@@ -399,6 +401,27 @@ namespace CalamityMusic.Tests
             }
             double none = Heart(0f), heart = Heart(1f);
             Check(none < 1e-5 && heart > 0.03, $"heartbeat only at low health (rms {none:0.00000} vs {heart:0.000})");
+
+            // The beat stays steady when health moves after a long time at low health.
+            {
+                var e = new MusicEngine { Volume = 1f, BassBoostDb = 0f, LowHealth = 0.5f };
+                var r = new Recorder(e);
+                e.Play(TrackInfo.FromFile(quiet, "Calamity", "A"), true, Transition.FadeIn(0.01f));
+                r.WaitForLoad();
+                r.Render(20.0);
+                e.LowHealth = 0.56f;
+                double from = r.Time;
+                r.Render(4.0);
+                var env = new List<double>();
+                for (double t = from; t < from + 4.0; t += 0.01) env.Add(r.Rms(t, t + 0.01));
+                double peak = env.Max(), thr = peak * 0.25;
+                var onsets = new List<double>();
+                for (int i = 1; i < env.Count; i++) if (env[i] > thr && env[i - 1] <= thr) onsets.Add(i * 0.01);
+                var gaps = onsets.Zip(onsets.Skip(1), (a, b) => b - a).ToList();
+                // Lub to dub is 0.24 s; dub to the next lub is the rest of a ~0.63 s beat.
+                bool steady = gaps.Count >= 8 && gaps.All(g => Math.Abs(g - 0.24) < 0.05 || (g > 0.33 && g < 0.45));
+                Check(steady, $"heartbeat stays on time when health changes ({string.Join(" ", gaps.Select(g => g.ToString("0.00")))})");
+            }
 
             var e3 = new MusicEngine { Volume = 1f };
             var r3 = new Recorder(e3);
@@ -620,11 +643,18 @@ namespace CalamityMusic.Tests
             Check(lib.PickTier("BossRush", 1, MusicMode.Calamity)?.SequenceIndex == 1 && lib.PickTier("BossRush", 3, MusicMode.Calamity)?.SequenceIndex == 3
                   && lib.PickTier("BossRush", 9, MusicMode.Calamity)?.SequenceIndex == 5, "Boss Rush tier picking");
 
+            // Favouriting any part favourites the whole song (picks only ever see part 1).
+            Check(lib.ToggleFavorite(lib.PartAt(p1, 2)) && lib.IsFavorite(p1) && lib.IsFavorite(lib.PartAt(p1, 3)), "favouriting part 2 favourites the song");
+            lib.ToggleFavorite(p1);
+            Check(!lib.IsFavorite(lib.PartAt(p1, 2)), "and unfavouriting works from any part");
+
             // Banning a multi-part song bans all of its parts, so a fight never starts on part 2.
             lib.BanSong(lib.PartAt(p1, 2));
             bool sawScal = false;
             for (int i = 0; i < 50; i++) if (lib.Pick(new[] { "SupremeCalamitas" }, MusicMode.Calamity, null, false, out _) != null) sawScal = true;
-            Check(!sawScal && lib.IsBanned(p1) && lib.IsBanned(lib.PartAt(p1, 3)), "banning a song bans every part");
+            Check(!sawScal && lib.IsBanned(p1) && lib.IsBanned(lib.FindByRelPath("Calamity/SupremeCalamitas/DM DOKURO - SBC [seq=scal 3].wav")),
+                  "banning a song bans every part");
+            Check(lib.PartAt(p1, 1) == null && lib.SequenceLength(p1) == 1, "banned parts are never handed out");
             lib.ClearBans();
             Check(lib.Pick(new[] { "SupremeCalamitas" }, MusicMode.Calamity, null, false, out _)?.SequenceIndex == 1, "unbanned song starts at part 1 again");
         }

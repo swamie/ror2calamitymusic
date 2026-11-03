@@ -86,7 +86,9 @@ namespace CalamityMusic.Library
 
         public bool IsFavorite(TrackInfo t)
         {
-            lock (favorites) return t != null && favorites.Contains(RelPath(t));
+            if (t == null) return false;
+            string key = SongKey(t);
+            lock (favorites) return favorites.Contains(key);
         }
 
         /// <summary>Toggles a favourite (favourites are picked three times as often). Returns the new state.</summary>
@@ -94,9 +96,9 @@ namespace CalamityMusic.Library
         {
             if (t == null) return false;
             bool now;
+            string rel = SongKey(t);
             lock (favorites)
             {
-                string rel = RelPath(t);
                 now = !favorites.Remove(rel);
                 if (now) favorites.Add(rel);
                 SaveList(FavoritesFile, favorites);
@@ -119,7 +121,7 @@ namespace CalamityMusic.Library
         public void BanSong(TrackInfo t)
         {
             if (t == null) return;
-            var parts = PartsOf(t);
+            var parts = AllPartsOf(t);
             lock (banned)
             {
                 banned.Add(RelPath(t));
@@ -175,11 +177,29 @@ namespace CalamityMusic.Library
 
         // ------------------------------------------------------------------ multi-part songs
 
-        private List<TrackInfo> PartsOf(TrackInfo t)
+        /// <summary>Every part of the song <paramref name="t"/> belongs to, in order, playable or not.</summary>
+        private List<TrackInfo> AllPartsOf(TrackInfo t)
         {
             if (t?.Sequence == null) return null;
             if (!index.BySlot.TryGetValue(t.Slot, out var byPack) || !byPack.TryGetValue(t.Pack, out var list)) return null;
             return list.Where(x => x.Sequence == t.Sequence).OrderBy(x => x.SequenceIndex).ToList();
+        }
+
+        /// <summary>The parts that can play: broken and banned files are left out.</summary>
+        private List<TrackInfo> PartsOf(TrackInfo t)
+        {
+            var all = AllPartsOf(t);
+            if (all == null) return null;
+            lock (badFiles) all.RemoveAll(x => badFiles.Contains(x.Path));
+            all.RemoveAll(IsBanned);
+            return all;
+        }
+
+        /// <summary>Favourites are stored per song: every part of a multi-part song shares its first part's path.</summary>
+        private string SongKey(TrackInfo t)
+        {
+            var all = AllPartsOf(t);
+            return RelPath(all != null && all.Count > 0 ? all[0] : t);
         }
 
         /// <summary>How many parts the song <paramref name="t"/> belongs to has in its folder (1 for normal songs).</summary>

@@ -126,6 +126,7 @@ namespace CalamityMusic.UI
             root = Ui.NewRect("Root", canvas.transform);
             root.anchorMin = root.anchorMax = new Vector2(0.5f, 0.69f); // upper middle, under the boss health bar
             group = root.gameObject.AddComponent<CanvasGroup>();
+            group.alpha = 0f;
             group.interactable = false;
             group.blocksRaycasts = false;
             content = Ui.NewRect("Content", root);
@@ -220,6 +221,9 @@ namespace CalamityMusic.UI
             flareLImg.color = flareRImg.color = pal.Glow;
             streak.color = new Color(1f, 1f, 1f, 0f);
 
+            // Hidden until the first Animate() this card gets, in case this frame's Update already ran.
+            group.alpha = 0f;
+            flareL.sizeDelta = flareR.sizeDelta = Vector2.zero;
             canvas.enabled = true;
             nameGlow.Cache();
             nameOutline.Cache();
