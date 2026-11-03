@@ -23,7 +23,7 @@ namespace CalamityMusic
     {
         public const string Guid = "com.swamie.calamitymusic";
         public const string ModName = "CalamityMusic";
-        public const string Version = "1.1.1";
+        public const string Version = "1.1.2";
         private const string Starstorm2Guid = "com.TeamMoonstorm.Starstorm2";
 
         private MusicEngine engine;

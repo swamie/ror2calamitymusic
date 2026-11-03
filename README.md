@@ -32,7 +32,7 @@ Turns every teleporter event and boss fight into a Calamity boss fight.
 
 ## Install
 
-With r2modman or Thunderstore Mod Manager: Settings > Import local mod, pick `CalamityMusic-1.1.1.zip`. It needs **BepInExPack** and **Risk Of Options**; the manager installs both.
+With r2modman or Thunderstore Mod Manager: Settings > Import local mod, pick `CalamityMusic-1.1.2.zip`. It needs **BepInExPack** and **Risk Of Options**; the manager installs both.
 
 By hand: copy the `plugins/CalamityMusic` folder from the zip into `BepInEx/plugins/`, and install Risk Of Options the same way.
 

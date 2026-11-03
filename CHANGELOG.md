@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- No loud blast when the game starts. The menu music now waits a couple of seconds after the title screen appears, while the game is still applying your volume settings, and fades in over 3 seconds. The game's own menu music stays down in the meantime instead of starting and then cutting out.
+
 ## 1.1.1
 
 - Fixes from a code review: no burst of music when it's stopped during the death tape stop, a steady heartbeat when your health changes, no double impact on a replaced drop, broken or banned song parts are skipped instead of retried forever, and favourites apply to a whole multi-part song.

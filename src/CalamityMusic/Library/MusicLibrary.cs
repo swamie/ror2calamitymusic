@@ -43,6 +43,10 @@ namespace CalamityMusic.Library
         private readonly Dictionary<string, string> lastPicked = new Dictionary<string, string>();
         private readonly System.Random rng = new System.Random();
         private volatile Index index = new Index();
+        private volatile bool scannedOnce;
+
+        /// <summary>True once the first scan of the Music folder has finished.</summary>
+        public bool Scanned => scannedOnce;
         private int scanning;
         private volatile bool rescanQueued;
 
@@ -417,6 +421,7 @@ namespace CalamityMusic.Library
             }
             next.HasBiome = next.All.Any(t => Slots.IsBiome(t.Slot));
             index = next;
+            scannedOnce = true;
             lock (badFiles) badFiles.Clear(); // give files that failed (locked, mid-download) another chance
             Log.Info($"Music library: {next.All.Count} song(s) in {next.BySlot.Count} theme folder(s), {next.Buildups.Count} custom buildup(s).");
         }

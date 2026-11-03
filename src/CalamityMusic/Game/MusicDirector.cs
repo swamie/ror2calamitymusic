@@ -63,6 +63,7 @@ namespace CalamityMusic.Game
         private bool warnedThisStage;
         private bool warnedNoAreaThemes;
         private float stageStart;
+        private const float MenuWarmupSeconds = 2.5f;
         private bool stageChecked;
         private bool runOver;
         private bool usingFileBuildup;
@@ -253,7 +254,9 @@ namespace CalamityMusic.Game
             volumeTimer -= dt;
             if (volumeTimer <= 0f)
             {
-                volumeTimer = 0.4f;
+                // Every frame for the first moments after launch, while the game is still applying the
+                // player's volume settings; then a few times a second.
+                volumeTimer = Time.realtimeSinceStartup < 20f ? 0f : 0.4f;
                 gameVolume = ModConfig.FollowGameVolume.Value ? VanillaMusic.MasterVolume01 * VanillaMusic.SettingVolume01 : 1f;
                 var focus = AudioManager.AudioFocusedOnlyConVar.instance;
                 focusOnly = focus != null && focus.onlyPlayWhenFocused;
@@ -986,14 +989,26 @@ namespace CalamityMusic.Game
             if (ambientTimer > 0f) return;
             ambientTimer = 0.2f;
 
+            bool playing = engine.ActiveMusicVoice != 0;
+            bool menuWarmup = !Run.instance && !ambientActive && !playing && now - stageStart < MenuWarmupSeconds;
+
             if (!StageMusicWanted(out var stage))
             {
                 if (ambientActive) StopAmbient(1.5f);
+                else if (menuWarmup && !library.Scanned && ModConfig.StageMusic.Value && ModConfig.MenuMusic.Value)
+                    VanillaMusic.FadeOut(); // songs still loading: keep the game's menu music down instead of letting it start then cut
                 else VanillaMusic.FadeIn();
                 return;
             }
 
-            bool playing = engine.ActiveMusicVoice != 0;
+            if (menuWarmup)
+            {
+                // Right after launch the game is still applying the player's volume settings: hold the
+                // game's music down and start ours once they've settled, so nothing blares.
+                VanillaMusic.FadeOut();
+                return;
+            }
+
             if (ambientActive && playing && (stage.Key == ambientScene || stage.SharesSlotWith(ambientTheme)))
             {
                 // Same theme (e.g. menu -> character select): keep the song going.
@@ -1003,7 +1018,7 @@ namespace CalamityMusic.Game
                 return;
             }
             if (now < ambientRetryAfter) return;
-            StartAmbient(now, Transition.Crossfade(ambientActive && playing ? 2.5f : 2f));
+            StartAmbient(now, ambientActive && playing ? Transition.Crossfade(2.5f) : Transition.FadeIn(3f));
         }
 
         private bool StartAmbient(float now, Transition transition)
