@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>CalamityMusic</AssemblyName>
+    <RootNamespace>CalamityMusic</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>portable</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CalamityMusic.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" PrivateAssets="all" />
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.33" IncludeAssets="compile" PrivateAssets="all" />
+    <PackageReference Include="RiskOfRain2.GameLibs" Version="1.5.0-r.1" PrivateAssets="all" />
+    <PackageReference Include="Rune580.Mods.RiskOfRain2.RiskOfOptions" Version="2.8.6" PrivateAssets="all" />
+    <!-- Managed audio decoders, shipped next to the plugin dll -->
+    <PackageReference Include="NLayer" Version="3.0.0" GeneratePathProperty="true" />
+    <PackageReference Include="NVorbis" Version="0.8.6" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <!-- Copy the decoder dlls next to the plugin; they ship inside the mod folder. -->
+  <Target Name="CopyDecoders" AfterTargets="Build">
+    <Copy SourceFiles="$(PkgNLayer)/lib/netstandard2.0/NLayer.dll;$(PkgNVorbis)/lib/netstandard2.0/NVorbis.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

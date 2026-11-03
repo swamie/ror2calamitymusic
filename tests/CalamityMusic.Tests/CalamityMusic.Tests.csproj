@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Offline harness: compiles the mod's audio + library code for desktop .NET (no Unity/RoR2 needed). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>CalamityMusic.Tests</AssemblyName>
+    <RootNamespace>CalamityMusic.Tests</RootNamespace>
+    <NoWarn>CS0649;CS0169</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../src/CalamityMusic/Audio/*.cs" Link="Mod/Audio/%(Filename)%(Extension)" />
+    <Compile Include="../../src/CalamityMusic/Library/*.cs" Link="Mod/Library/%(Filename)%(Extension)" />
+    <Compile Include="../../src/CalamityMusic/UI/BannerStyles.cs" Link="Mod/UI/BannerStyles.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- BossThemes needs BepInEx's ConfigFile. The package is compile-only, so copy the dll next to the exe. -->
+    <PackageReference Include="BepInEx.BaseLib" Version="5.4.20" GeneratePathProperty="true" />
+    <None Include="$(PkgBepInEx_BaseLib)/lib/netstandard2.0/BepInEx.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <PackageReference Include="NLayer" Version="3.0.0" />
+    <PackageReference Include="NVorbis" Version="0.8.6" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,10 @@
+{
+  "name": "CalamityMusic",
+  "version_number": "1.1.2",
+  "website_url": "https://github.com/swamie/ror2calamitymusic",
+  "description": "Calamity and Infernum boss music for teleporter events and boss fights. Bass boosted buildup and drop, boss matched themes, Now Playing banner. Bring your own songs.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2122",
+    "Rune580-Risk_Of_Options-2.8.6"
+  ]
+}
