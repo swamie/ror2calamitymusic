@@ -70,6 +70,7 @@ namespace CalamityMusic.Tests
             Run("Multi-part songs", MultiPart);
             Run("Library folders and picking", LibraryTest);
             Run("Boss theme mapping", ThemesTest);
+            Run("Stage music", StageMusicTest);
 
             Console.WriteLine();
             Console.WriteLine(failures == 0 ? $"ALL {checks} CHECKS PASSED" : $"{failures} of {checks} CHECKS FAILED");
@@ -534,6 +535,49 @@ namespace CalamityMusic.Tests
             File.WriteAllText(Path.Combine(dir, "CalamityMusic.BossThemes.cfg"), cfg.Replace("VagrantBody = LeviathanAnahita, AquaticScourge", "VagrantBody = Vanilla"));
             themes.Reload();
             Check(themes.Resolve("VagrantBody", null).KeepVanilla, "editing the config to Vanilla keeps the game's music");
+        }
+
+        private static void StageMusicTest()
+        {
+            string dir = Path.Combine(outDir, "stagecfg");
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            Directory.CreateDirectory(dir);
+            var stages = new StageThemes(dir);
+            Check(stages.Resolve("title", "Main Menu").Slots[0] == "Biome_Title", "main menu -> title theme");
+            Check(stages.Resolve("lobby", null).SharesSlotWith(stages.Resolve("title", null)), "character select keeps the menu song going");
+            Check(stages.Resolve("bazaar", "Bazaar Between Time").Slots[0] == "Biome_SunkenSea", "Bazaar has stage music");
+            Check(stages.Resolve("voidstage", "Void Locus").Slots[0] == "Biome_Abyss4", "Void Locus -> Abyss");
+            Check(stages.Resolve("sulfurpools", null).Slots[0] == "Biome_SulphurousSea", "Sulfur Pools -> Sulphurous Sea");
+            Check(stages.Resolve("meridian", "Prime Meridian").Slots[0] == "Biome_EternalGarden", "Prime Meridian (DLC2) mapped");
+            Check(stages.Resolve("intro", null).KeepVanilla, "opening cutscene keeps vanilla");
+            Check(stages.Resolve("computationalexchange", "Computational Exchange").Slots[0] == "Biome_Lab", "unknown machine stage guessed as lab");
+            Check(stages.Resolve("frostbitepeaks", null).Slots[0] == "Biome_Blizzard", "unknown snowy stage guessed as blizzard");
+            Check(stages.Resolve("starfallruins", null).Slots[0] == "Biome_Astral", "'star' beats the 'tar' rule");
+            Check(stages.Resolve("weirdmodstage", "Gnorp Land").Slots[0] == Slots.AnyBiome, "anything else -> any area theme");
+            string cfg = File.ReadAllText(Path.Combine(dir, "CalamityMusic.StageThemes.cfg"));
+            Check(cfg.Contains("bazaar = Biome_SunkenSea") && cfg.Contains("weirdmodstage = Biome_Any"), "stage config lists defaults and new stages");
+
+            string root = Path.Combine(outDir, "stagelib", "Music");
+            if (Directory.Exists(Path.Combine(outDir, "stagelib"))) Directory.Delete(Path.Combine(outDir, "stagelib"), true);
+            void Put(string rel)
+            {
+                string p2 = Path.Combine(root, rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(p2));
+                File.Copy(F("base.wav"), p2, true);
+            }
+            Put("Calamity/Biome_Title/DM DOKURO - The Tale of a Cruel World.wav");
+            Put("Calamity/Biome_Abyss4/DM DOKURO - void.wav");
+            Put("Calamity/Biome_SunkenSea/DM DOKURO - sanctuary.wav");
+            Put("Calamity/SupremeCalamitas/DM DOKURO - Stained, Brutal Calamity.wav");
+            var lib = new MusicLibrary(root);
+            lib.Rescan();
+            Check(lib.HasStageMusic, "library knows it has stage music");
+            Check(lib.PickStage(new[] { "Biome_Abyss4" }, MusicMode.Calamity, null)?.Title == "void", "stage picks its own area theme");
+            var any = new HashSet<string>();
+            for (int i = 0; i < 30; i++) any.Add(lib.PickStage(new[] { "Biome_Blizzard" }, MusicMode.Calamity, null)?.Title);
+            Check(any.SetEquals(new[] { "void", "sanctuary" }), "missing area theme falls back to other area themes, never the menu or a boss song: " + string.Join(", ", any));
+            Check(lib.Pick(new[] { "Cryogen" }, MusicMode.Calamity, null, true, out _)?.Title == "Stained, Brutal Calamity", "boss fallback never picks calm area themes");
+            Check(lib.RandomFilledSlot(MusicMode.Calamity) == "SupremeCalamitas", "preview uses boss themes only");
         }
 
         // ------------------------------------------------------------------ helpers

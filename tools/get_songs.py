@@ -133,6 +133,7 @@ CATALOG = [
     song("Infernum", ["PrimordialWyrm"], "PinpinNeon", "Vocitus Terminus", ["vocitus terminus"], ["AdultEidolonWyrm"]),
     song("Infernum", ["Generic"], "PinpinNeon", "Storm Before Dawn", ["storm before dawn"], ["StormBeforeDawn"]),
     song("Infernum", ["Generic"], "PinpinNeon", "Duel for a Lost Kingdom", ["duel for a lost kingdom"], ["BereftVassal"]),
+    song("Infernum", ["Generic"], "PinpinNeon", "Misanthropic Encounters", ["misanthropic encounters"], ["Minibosses"]),
 
     # ---- Wrath of the Gods and other add-ons
     song("Extensions", ["AvatarOfEmptiness"], "ENNWAY!", "PARADISE PARASITE", ["paradise parasite"], ["AvatarRift"], ("avatar", 1)),
@@ -141,12 +142,37 @@ CATALOG = [
     song("Extensions", ["NamelessDeity"], NAMELESS, "TWISTED GARDEN", ["twisted garden"], ["NamelessDeity"], ("nameless", 1)),
     song("Extensions", ["NamelessDeity"], NAMELESS, "ARIA BEYOND THE SHINING FIRMAMENT", [], ["ARIA BEYOND THE SHINING FIRMAMENT"], ("nameless", 2)),
     song("Extensions", ["Mars"], "Moonburn", "RAMifications", ["ramifications"], ["Mars"]),
-    # Edenic Whispers is the calm Eternal Garden theme, so it joins the general pool.
-    song("Extensions", ["Generic"], "ENNWAY!", "Edenic Whispers", ["edenic whispers"], ["EternalGarden"]),
     song("Extensions", ["Goozma"], "The Exiled Fellow", "Glutinous Arbitration", ["glutinous arbitration", "glutinous arbiration"]),
     song("Extensions", ["Goozma"], "The Exiled Fellow", "Viscous Desperation", ["viscous desperation"]),
     song("Extensions", ["Astrageldon"], DOKURO, "Cosmic Disgust", ["cosmic disgust"]),
     song("Extensions", ["Astrageldon"], "Heart Plus Up!", "Galactic Destruction", ["galactic destruction"]),
+
+    # ---- Area themes (stage music). Titles from the Calamity wiki and the mods' music box names.
+    song("Calamity", ["Biome_Title"], DOKURO, "The Tale of a Cruel World", ["the tale of a cruel world"], ["CalamityTitle"]),
+    song("Calamity", ["Biome_SunkenSea"], DOKURO, "sanctuary", ["sanctuary"], ["SunkenSea"]),
+    song("Calamity", ["Biome_SulphurousSea"], DOKURO, "wasteland", ["wasteland"], ["SulphurousSeaDay"]),
+    song("Calamity", ["Biome_SulphurousNight"], "Heart Plus Up!", "caustic tides", ["caustic tides"], ["SulphurousSeaNight"]),
+    song("Calamity", ["Biome_SulphurousRain"], "Heart Plus Up!", "septication", ["septication"], ["SulphurousSeaRain"]),
+    song("Calamity", ["Biome_AcidRain"], "RoverdriveX", "corrosion!", ["corrosion"], ["AcidRainTier1"]),
+    song("Calamity", ["Biome_AcidRain"], "PinpinNeon", "nuclear monsoon", ["nuclear monsoon"], ["AcidRainTier3"]),
+    song("Calamity", ["Biome_Abyss1"], "Heart Plus Up!", "hesitation", ["hesitation"], ["AbyssLayer1"]),
+    song("Calamity", ["Biome_Abyss2"], DOKURO, "Hadopelagic Pressure", ["hadopelagic pressure"], ["AbyssLayer2"]),
+    song("Calamity", ["Biome_Abyss3"], "CDMusic", "hydrothermophobia", ["hydrothermophobia"], ["AbyssLayer3"]),
+    song("Calamity", ["Biome_Abyss4"], DOKURO, "void", ["void"], ["AbyssLayer4"]),
+    song("Calamity", ["Biome_Astral"], DOKURO, "The Heaven-Sent Abomination", ["the heaven sent abomination"], ["AstralInfection"]),
+    song("Calamity", ["Biome_AstralUnderground"], DOKURO, "Treasures Within the Abomination", ["treasures within the abomination"], ["AstralInfectionUnderground"]),
+    song("Calamity", ["Biome_BrimstoneCrags"], DOKURO, "The Step Below Hell", ["the step below hell"], ["BrimstoneCrags"]),
+    song("Calamity", ["Biome_Lab"], "Heart Plus Up!", "Engineer's Sanctum", ["engineers sanctum"], ["BioLab"]),
+    song("Infernum", ["Biome_Title"], "PinpinNeon", "Sky After Rain", ["sky after rain"], ["TitleScreen"]),
+    song("Extensions", ["Biome_EternalGarden"], "ENNWAY!", "Edenic Whispers", ["edenic whispers"], ["EternalGarden"]),
+    song("Extensions", ["Biome_Rift"], "Moonburn", "nowhere now here", ["nowhere now here"], ["RiftEclipse"]),
+    song("Extensions", ["Biome_Rift"], "Lucille Karma", "Mirrortwist", ["mirrortwist"], ["RiftEclipseFog"]),
+    song("Extensions", ["Biome_Blizzard"], "Moonburn", "-273.15", ["273 15"], ["RiftEclipseBlizzard"]),
+    song("Extensions", ["Biome_Blizzard"], "Moonburn", "Svalbard", ["svalbard"], ["Svalbard"]),
+    song("Extensions", ["Biome_Stars"], "Moonburn", "Stellar Requiem", ["stellar requiem"], ["StellarRequiem"]),
+    song("Extensions", ["Biome_Stars"], "ENNWAY! & Moonburn", "ascent", ["ascent"], ["ascent"]),
+    song("Extensions", ["Biome_Stars"], "Moonburn", "The Telescope Song", ["the telescope song"], ["TheTelescopeSong"]),
+    song("Extensions", ["Biome_Credits"], "Moonburn", "Wrath of the Gods", ["wrath of the gods"], ["EndCredits"]),
 ]
 
 SUPPORTED = {".ogg", ".mp3", ".wav"}
@@ -520,7 +546,7 @@ class Installer:
             if entry["pack"] != "Calamity":
                 continue
             for slot in entry["slots"]:
-                if (entry["pack"], slot) not in have and slot not in missing and slot != "MoonEscape":
+                if (entry["pack"], slot) not in have and slot not in missing and slot != "MoonEscape" and not slot.startswith("Biome_"):
                     missing.append(slot)
         return missing
 

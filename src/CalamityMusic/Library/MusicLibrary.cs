@@ -33,6 +33,7 @@ namespace CalamityMusic.Library
                 new Dictionary<string, Dictionary<string, List<TrackInfo>>>(StringComparer.OrdinalIgnoreCase);
             public readonly List<TrackInfo> All = new List<TrackInfo>();
             public readonly List<string> Buildups = new List<string>();
+            public bool HasBiome;
         }
 
         private readonly object cacheLock = new object();
@@ -62,6 +63,14 @@ namespace CalamityMusic.Library
             Directory.CreateDirectory(Path.Combine(Root, BuildupFolder));
             foreach (string pack in new[] { PackCalamity, PackInfernum, PackExtensions })
                 Directory.CreateDirectory(Path.Combine(Root, pack));
+
+            // Area-theme folders are created on first run and when upgrading from a version without stage music.
+            if (!firstRun && !Directory.Exists(Path.Combine(Root, PackCalamity, Slots.Title)))
+            {
+                foreach (var slot in Slots.All.Where(s => s.IsBiome))
+                    Directory.CreateDirectory(Path.Combine(Root, slot.ExtensionOnly ? PackExtensions : PackCalamity, slot.Name));
+                Directory.CreateDirectory(Path.Combine(Root, PackInfernum, Slots.Title));
+            }
 
             if (firstRun)
             {
@@ -106,6 +115,9 @@ namespace CalamityMusic.Library
             sb.AppendLine("  Infernum/<Boss>/     songs used in Infernum mode (bosses with nothing here use the Calamity song)");
             sb.AppendLine("  Extensions/<Boss>/   songs from Calamity add-on mods (used in Calamity and Mixed mode)");
             sb.AppendLine("  Buildups/            optional custom teleporter buildups (otherwise one is synthesised live)");
+            sb.AppendLine();
+            sb.AppendLine("Folders starting with Biome_ hold area themes: they're the stage and menu music. Which stage");
+            sb.AppendLine("uses which is in BepInEx/config/CalamityMusic.StageThemes.cfg.");
             sb.AppendLine();
             sb.AppendLine("Name files \"Artist - Title\" and Now Playing will show exactly that, e.g.");
             sb.AppendLine("  Calamity/SupremeCalamitas/DM DOKURO - Stained, Brutal Calamity.ogg");
@@ -216,6 +228,7 @@ namespace CalamityMusic.Library
                     }
                 }
             }
+            next.HasBiome = next.All.Any(t => Slots.IsBiome(t.Slot));
             index = next;
             lock (badFiles) badFiles.Clear(); // give files that failed (locked, mid-download) another chance
             Log.Info($"Music library: {next.All.Count} song(s) in {next.BySlot.Count} theme folder(s), {next.Buildups.Count} custom buildup(s).");
@@ -332,13 +345,41 @@ namespace CalamityMusic.Library
             }
             if (candidates.Count == 0 && anySongFallback)
             {
-                candidates = idx.All.Where(t => !t.Slot.Equals(Slots.Escape, StringComparison.OrdinalIgnoreCase)).ToList();
+                // Any boss theme at all (never the escape song or calm area themes).
+                candidates = idx.All.Where(t => !t.Slot.Equals(Slots.Escape, StringComparison.OrdinalIgnoreCase) && !Slots.IsBiome(t.Slot)).ToList();
                 lock (badFiles) candidates.RemoveAll(t => badFiles.Contains(t.Path));
             }
+            return Choose(candidates, string.Join(",", slots), avoid);
+        }
+
+        /// <summary>
+        /// Picks stage music for a scene whose theme lists <paramref name="slots"/> (area themes).
+        /// Falls back to the other packs, then to any area theme except the menu and credits ones.
+        /// Never returns a boss theme.
+        /// </summary>
+        public TrackInfo PickStage(IList<string> slots, MusicMode mode, TrackInfo avoid)
+        {
+            var idx = index;
+            var specific = slots.Where(s => !s.Equals(Slots.AnyBiome, StringComparison.OrdinalIgnoreCase)).ToList();
+            var candidates = Collect(idx, specific, PrimaryPacks(mode));
+            if (candidates.Count == 0) candidates = Collect(idx, specific, FallbackPacks(mode));
+            if (candidates.Count == 0)
+            {
+                var anyArea = idx.BySlot.Keys.Where(s => Slots.IsBiome(s)
+                    && !s.Equals(Slots.Title, StringComparison.OrdinalIgnoreCase)
+                    && !s.Equals(Slots.Credits, StringComparison.OrdinalIgnoreCase)).ToList();
+                candidates = Collect(idx, anyArea, PrimaryPacks(mode));
+                if (candidates.Count == 0) candidates = Collect(idx, anyArea, FallbackPacks(mode));
+            }
+            return Choose(candidates, "stage:" + string.Join(",", slots), avoid);
+        }
+
+        public bool HasStageMusic => index.HasBiome;
+
+        private TrackInfo Choose(List<TrackInfo> candidates, string key, TrackInfo avoid)
+        {
             if (candidates.Count == 0) return null;
             candidates = FirstParts(candidates);
-
-            string key = string.Join(",", slots);
             if (candidates.Count > 1)
             {
                 lastPicked.TryGetValue(key, out string last);
@@ -406,7 +447,7 @@ namespace CalamityMusic.Library
         public string RandomFilledSlot(MusicMode mode)
         {
             var idx = index;
-            var slots = idx.BySlot.Keys.Where(s => !s.Equals(Slots.Escape, StringComparison.OrdinalIgnoreCase)
+            var slots = idx.BySlot.Keys.Where(s => !s.Equals(Slots.Escape, StringComparison.OrdinalIgnoreCase) && !Slots.IsBiome(s)
                                                     && Collect(idx, new[] { s }, PrimaryPacks(mode)).Count > 0).ToList();
             if (slots.Count == 0) slots = idx.BySlot.Keys.ToList();
             return slots.Count == 0 ? null : slots[rng.Next(slots.Count)];

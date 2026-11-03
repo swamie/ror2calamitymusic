@@ -3,6 +3,7 @@
 Turns every teleporter event and boss fight into a Calamity boss fight.
 
 - When you hit the teleporter and it goes red, a bass-heavy buildup kicks in. The moment the boss spawns it drops straight into that boss's Calamity theme.
+- Stage music too: every stage, the menus, the Bazaar, the Void, hidden realms and DLC stages play a Calamity area theme. The Sulfur Pools get the Sulphurous Sea, Abyssal Depths and the Void get the Abyss, Scorched Acres get the Brimstone Crags, and so on. After a boss fight the boss theme crossfades back into the stage's theme.
 - Every Risk of Rain 2 boss has its own matching theme. Mithrix gets Supreme Calamitas, the Wandering Vagrant (a jellyfish) gets the aquatic Leviathan and Anahita theme, the Overloading Worm gets the Storm Weaver, and so on. Bosses can have several themes and one is picked at random each fight.
 - Calamity, Infernum and Mixed modes. Infernum mode uses the Infernum version of a theme when you have one and the normal Calamity song when you don't, just like the real mod. Set it to Vanilla to get the normal Risk of Rain music back.
 - A "Now Playing" banner in the style of the Calamity/Infernum music display (white text, blue outline, teal glow, music note) slides in when a theme starts and pulses with the bass.
@@ -89,7 +90,7 @@ If a boss's folder is empty the mod tries the `Generic` folder, then any song yo
 
 **Infernum folder:** Infernum only has its own tracks for a few bosses, all by PinpinNeon: `SupremeCalamitas` (Scars of Calamity), `ExoMechs` (Catastrophic Fabrications, Zenith Fabrications) and `PrimordialWyrm` (Vocitus Terminus). Everything else uses the Calamity song.
 
-**Extensions folder (Calamity add-on mods):** `AvatarOfEmptiness` (Wrath of the Gods, ENNWAY! - PARADISE PARASITE), `NamelessDeity` (Wrath of the Gods, Heart Plus Up! & ENNWAY! - TWISTED GARDEN), `Mars` (Wrath of the Gods, Moonburn - RAMifications), `Goozma` (Hunt of the Old God), `Astrageldon` (Catalyst). ENNWAY! - Edenic Whispers is the calm Wrath of the Gods Eternal Garden theme, so it goes in `Generic` rather than a boss folder.
+**Extensions folder (Calamity add-on mods):** `AvatarOfEmptiness` (Wrath of the Gods, ENNWAY! - PARADISE PARASITE), `NamelessDeity` (Wrath of the Gods, Heart Plus Up! & ENNWAY! - TWISTED GARDEN), `Mars` (Wrath of the Gods, Moonburn - RAMifications), `Goozma` (Hunt of the Old God), `Astrageldon` (Catalyst). ENNWAY! - Edenic Whispers is the calm Wrath of the Gods Eternal Garden theme, so it is stage music (`Biome_EternalGarden`) rather than a boss song.
 
 ## Which boss gets which theme
 
@@ -121,6 +122,32 @@ If a boss's folder is empty the mod tries the `Generic` folder, then any song yo
 
 Bosses the mod has never seen (new DLC, other mods, "horde of many" teleporter events) get a theme guessed from their name the first time they appear: anything with "fire" in its name gets Brimstone Elemental, a "Solus" machine gets Exo Mechs, and so on. Every mapping, including those, is written to `BepInEx/config/CalamityMusic.BossThemes.cfg`. Edit it to change any boss. Use comma-separated folder names, your own folder names work too, and `Vanilla` keeps the normal game music for that boss.
 
+## Which stage gets which area theme
+
+| Stage | Area theme |
+|---|---|
+| Main menu, character select | The Tale of a Cruel World (Infernum mode: Sky After Rain) |
+| Titanic Plains, Verdant Falls, Bazaar | Sunken Sea |
+| Distant Roost, Viscous Falls | Sulphurous Sea at night / in the rain |
+| Siphoned Forest | Rift Eclipse blizzard (Wrath of the Gods) |
+| Abandoned Aqueduct | Sulphurous Sea |
+| Wetland Aspect | Sulphurous Sea in the rain, Rift Eclipse fog |
+| Aphelian Sanctuary | Wrath of the Gods sky themes, Astral Infection |
+| Rallypoint Delta | Draedon's labs, blizzard |
+| Scorched Acres, Reformed Altar, Helminth Hatchery | Brimstone Crags |
+| Sulfur Pools | Sulphurous Sea, Acid Rain |
+| Abyssal Depths | Abyss layers 2 and 3 |
+| Siren's Call | Abyss layer 1, Sulphurous Sea at night |
+| Sundered Grove, Treeborn Colony | Astral Infection underground |
+| Sky Meadow, Gilded Coast, Golden Dieback, Prime Meridian | Eternal Garden (Wrath of the Gods) |
+| Commencement | Astral Infection |
+| Void Fields, Void Locus, the Planetarium, Simulacrum | Abyss layers 3 and 4 |
+| A Moment, Fractured / Whole, Shattered Abodes | Rift Eclipse (Wrath of the Gods) |
+| Bulwark's Ambry | Draedon's labs |
+| Ending credits | Wrath of the Gods (Moonburn) |
+
+New stages (Alloyed Collective, Starstorm 2 or anything else) get a theme guessed from their name the first time you visit. Everything is in `BepInEx/config/CalamityMusic.StageThemes.cfg`; use `Vanilla` for any stage where you want the game's own music. If a stage's area theme is missing, it borrows another area theme (never a boss song).
+
 ## Settings
 
 Everything is in **Settings > Mod Options > Calamity Music**:
@@ -130,6 +157,7 @@ Everything is in **Settings > Mod Options > Calamity Music**:
 - **Bass Boost** and **Bass Boost Frequency**: how hard the bass hits (0 dB turns it off).
 - **Preview**: plays a buildup and drop into a random song right there in the menu so you can tune volume and bass.
 - **Get Songs**: installs all the songs for you (see above).
+- **Stage Music**: Calamity area themes for every stage (on by default), **Menu Music**, and a separate **Stage Music Volume**.
 - **Teleporter Buildup**: on/off, synth or your own buildup files, length, and how loud the drop impact is.
 - **Teleporter Music Ends When**: keep the theme going until the teleporter is fully charged (default) or stop when the boss dies.
 - **When A Song Ends**: loop it seamlessly, or crossfade into another song for the same boss.

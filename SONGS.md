@@ -77,12 +77,39 @@ What goes in each boss folder. Every track listed here is filled in by the scrip
 | Infernum/SupremeCalamitas | Supreme Witch, Calamitas | Scars of Calamity | PinpinNeon | Infernum Mode Music | no |
 | Infernum/ExoMechs | Exo Mechs | Catastrophic Fabrications, Zenith Fabrications | PinpinNeon | Infernum Mode Music | no |
 | Infernum/PrimordialWyrm | Primordial Wyrm | Vocitus Terminus | PinpinNeon | Infernum Mode Music | no |
-| Infernum/Generic | any boss without a better match | Storm Before Dawn, Duel for a Lost Kingdom | PinpinNeon | Infernum Mode Music | no |
+| Infernum/Generic | any boss without a better match | Storm Before Dawn, Duel for a Lost Kingdom, Misanthropic Encounters | PinpinNeon | Infernum Mode Music | no |
 | Extensions/AvatarOfEmptiness | Avatar of Emptiness (used for Voidling) | PARADISE PARASITE | ENNWAY! | Wrath of the Gods | no |
 | Extensions/NamelessDeity | Nameless Deity (used for False Son) | TWISTED GARDEN, then the final-phase theme (file name "ARIA BEYOND THE SHINING FIRMAMENT"; the official title is hidden in game) | Heart Plus Up! & ENNWAY! | Wrath of the Gods | no |
 | Extensions/Mars | XG-07 Mars (used for Xi Construct) | RAMifications | Moonburn | Wrath of the Gods | no |
-| Extensions/Generic | any boss without a better match | Edenic Whispers | ENNWAY! | Wrath of the Gods | no |
 | Extensions/Astrageldon | Astrageldon (used for Twisted Scavengers) | Cosmic Disgust | DM DOKURO | no | yes |
+
+
+### Area themes (stage music)
+
+| Folder | Area | Song | Composer | Workshop | Bandcamp |
+|---|---|---|---|---|---|
+| Calamity/Biome_Title | main menu | The Tale of a Cruel World | DM DOKURO | yes | yes |
+| Infernum/Biome_Title | main menu (Infernum mode) | Sky After Rain | PinpinNeon | Infernum Mode Music | no |
+| Calamity/Biome_SunkenSea | Sunken Sea | sanctuary | DM DOKURO | yes | yes |
+| Calamity/Biome_SulphurousSea | Sulphurous Sea (day) | wasteland | DM DOKURO | yes | yes |
+| Calamity/Biome_SulphurousNight | Sulphurous Sea (night) | caustic tides | Heart Plus Up! | yes | no |
+| Calamity/Biome_SulphurousRain | Sulphurous Sea (rain) | septication | Heart Plus Up! | yes | no |
+| Calamity/Biome_AcidRain | Acid Rain | corrosion!, nuclear monsoon | RoverdriveX, PinpinNeon | yes | no |
+| Calamity/Biome_Abyss1 | Abyss layer 1 | hesitation | Heart Plus Up! | yes | no |
+| Calamity/Biome_Abyss2 | Abyss layer 2 | Hadopelagic Pressure | DM DOKURO | yes | yes |
+| Calamity/Biome_Abyss3 | Abyss layer 3 | hydrothermophobia | CDMusic | yes | no |
+| Calamity/Biome_Abyss4 | Abyss layer 4 | void | DM DOKURO | yes | yes |
+| Calamity/Biome_Astral | Astral Infection | The Heaven-Sent Abomination | DM DOKURO | yes | yes |
+| Calamity/Biome_AstralUnderground | Astral Infection (underground) | Treasures Within the Abomination | DM DOKURO | yes | yes |
+| Calamity/Biome_BrimstoneCrags | Brimstone Crags | The Step Below Hell | DM DOKURO | yes | yes |
+| Calamity/Biome_Lab | Draedon's labs | Engineer's Sanctum | Heart Plus Up! | yes | no |
+| Extensions/Biome_EternalGarden | Eternal Garden | Edenic Whispers | ENNWAY! | Wrath of the Gods | no |
+| Extensions/Biome_Rift | Rift Eclipse | nowhere now here, Mirrortwist | Moonburn, Lucille Karma | Wrath of the Gods | no |
+| Extensions/Biome_Blizzard | Rift Eclipse blizzard | -273.15, Svalbard | Moonburn | Wrath of the Gods | no |
+| Extensions/Biome_Stars | sky themes | Stellar Requiem, ascent, The Telescope Song | Moonburn, ENNWAY! & Moonburn | Wrath of the Gods | no |
+| Extensions/Biome_Credits | ending credits | Wrath of the Gods | Moonburn | Wrath of the Gods | no |
+
+Which Risk of Rain 2 stage uses which area theme is in the README and in `CalamityMusic.StageThemes.cfg`.
 
 Notes:
 - The Bandcamp album has the three Sentinel themes as one "Servants of the Scourge" track. The script puts it in all three folders.

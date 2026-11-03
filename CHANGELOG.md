@@ -10,4 +10,5 @@
 - Now Playing banner styled after the Calamity/Infernum music display, pulsing with the bass.
 - Settings in Mod Options: volume, bass, buildup, banner, preview button.
 - One-click song installer (Get Songs button, or tools/get_songs.py): fetches the free Calamity music mods from Steam Workshop and files every boss theme.
+- Stage music: every stage, menu, Bazaar, Void stage, hidden realm and DLC stage plays a Calamity area theme (Sunken Sea, Sulphurous Sea, Abyss, Astral Infection, Brimstone Crags, labs, Wrath of the Gods areas). Boss themes crossfade back into it. Mapping in CalamityMusic.StageThemes.cfg.
 - Multi-part songs (Supreme Calamitas, Devourer of Gods, Yharon, Avatar of Emptiness...) play their parts back to back without a gap.

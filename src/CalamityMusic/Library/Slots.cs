@@ -11,6 +11,14 @@ namespace CalamityMusic.Library
         public const string Generic = "Generic";
         public const string Escape = "MoonEscape";
 
+        /// <summary>Area themes live in folders starting with this; they're stage music, never boss music.</summary>
+        public const string BiomePrefix = "Biome_";
+        public const string AnyBiome = "Biome_Any";
+        public const string Title = "Biome_Title";
+        public const string Credits = "Biome_Credits";
+
+        public static bool IsBiome(string slot) => slot != null && slot.StartsWith(BiomePrefix, System.StringComparison.OrdinalIgnoreCase);
+
         public sealed class SlotDef
         {
             public string Name;
@@ -18,6 +26,7 @@ namespace CalamityMusic.Library
             public string Suggested;          // base Calamity / music mod
             public string SuggestedInfernum;  // Infernum override, if one exists
             public bool ExtensionOnly;
+            public bool IsBiome => Slots.IsBiome(Name);
         }
 
         public static readonly List<SlotDef> All = new List<SlotDef>
@@ -61,8 +70,29 @@ namespace CalamityMusic.Library
             X("Goozma", "Goozma (Hunt of the Old God)", "Glutinous Arbitration | Viscous Desperation"),
             X("Astrageldon", "Astrageldon (Catalyst)", "DM DOKURO - Cosmic Disgust | Heart Plus Up! - Galactic Destruction"),
 
-            S(Generic, "Any boss without a better match (modded bosses, hordes)", "Anything you like, e.g. ENNWAY! - Edenic Whispers"),
+            S(Generic, "Any boss without a better match (modded bosses, hordes)", "Anything you like"),
             S(Escape, "Moon escape after Mithrix (optional, leave empty to keep the vanilla escape music)", "DM DOKURO - UNIVERSAL COLLAPSE"),
+
+            // Area themes for stage music (see CalamityMusic.StageThemes.cfg for which stage uses which).
+            S("Biome_Title", "Main menu", "DM DOKURO - The Tale of a Cruel World", "PinpinNeon - Sky After Rain"),
+            S("Biome_SunkenSea", "Sunken Sea", "DM DOKURO - sanctuary"),
+            S("Biome_SulphurousSea", "Sulphurous Sea (day)", "DM DOKURO - wasteland"),
+            S("Biome_SulphurousNight", "Sulphurous Sea (night)", "Heart Plus Up! - caustic tides"),
+            S("Biome_SulphurousRain", "Sulphurous Sea (rain)", "Heart Plus Up! - septication"),
+            S("Biome_AcidRain", "Acid Rain", "RoverdriveX - corrosion! | PinpinNeon - nuclear monsoon"),
+            S("Biome_Abyss1", "Abyss, layer 1", "Heart Plus Up! - hesitation"),
+            S("Biome_Abyss2", "Abyss, layer 2", "DM DOKURO - Hadopelagic Pressure"),
+            S("Biome_Abyss3", "Abyss, layer 3", "CDMusic - hydrothermophobia"),
+            S("Biome_Abyss4", "Abyss, layer 4", "DM DOKURO - void"),
+            S("Biome_Astral", "Astral Infection", "DM DOKURO - The Heaven-Sent Abomination"),
+            S("Biome_AstralUnderground", "Astral Infection (underground)", "DM DOKURO - Treasures Within the Abomination"),
+            S("Biome_BrimstoneCrags", "Brimstone Crags", "DM DOKURO - The Step Below Hell"),
+            S("Biome_Lab", "Draedon's labs", "Heart Plus Up! - Engineer's Sanctum"),
+            X("Biome_EternalGarden", "Eternal Garden (Wrath of the Gods)", "ENNWAY! - Edenic Whispers"),
+            X("Biome_Rift", "Rift Eclipse (Wrath of the Gods)", "Moonburn - nowhere now here | Lucille Karma - Mirrortwist"),
+            X("Biome_Blizzard", "Rift Eclipse blizzard (Wrath of the Gods)", "Moonburn - -273.15 | Moonburn - Svalbard"),
+            X("Biome_Stars", "Wrath of the Gods sky themes", "Moonburn - Stellar Requiem | ENNWAY! & Moonburn - ascent | Moonburn - The Telescope Song"),
+            X("Biome_Credits", "Ending credits (Wrath of the Gods)", "Moonburn - Wrath of the Gods"),
         };
 
         private static SlotDef S(string name, string boss, string suggested, string infernum = null) =>

@@ -13,7 +13,8 @@ namespace CalamityMusic.Game
     /// Watches the game and decides what plays:
     ///   teleporter turns red -> buildup -> (boss spawns) -> drop into that boss's Calamity theme
     ///   other boss fights (Mithrix, Voidling, False Son, Aurelionite, modded) -> straight drop
-    ///   fight over -> fade out, give the game its music back
+    ///   fight over -> crossfade back to the stage's Calamity area theme (or the game's own music)
+    ///   no fight -> the stage/menu plays a Calamity area theme picked from CalamityMusic.StageThemes.cfg
     /// Everything it reads (teleporter state, boss group members) is networked, so it runs locally
     /// on every player's game with no host-side setup.
     /// </summary>
@@ -33,6 +34,7 @@ namespace CalamityMusic.Game
         private MusicEngine engine;
         private MusicLibrary library;
         private BossThemes themes;
+        private StageThemes stageThemes;
         private NowPlayingBanner banner;
 
         private State state = State.Idle;
@@ -54,6 +56,13 @@ namespace CalamityMusic.Game
         private bool holdStarted;
         private float retryAfter;
 
+        // Stage ("ambient") music: plays while state is Idle.
+        private bool ambientActive;
+        private string ambientScene;
+        private BossTheme ambientTheme;
+        private TrackInfo ambientTrack;
+        private float ambientRetryAfter;
+
         private readonly List<Sighting> alive = new List<Sighting>();
         private Sighting? dominant;
         private float scanTimer;
@@ -67,11 +76,12 @@ namespace CalamityMusic.Game
         private bool empyreanLookedUp;
         private readonly System.Random rng = new System.Random();
 
-        public void Init(MusicEngine engine, MusicLibrary library, BossThemes themes, NowPlayingBanner banner)
+        public void Init(MusicEngine engine, MusicLibrary library, BossThemes themes, StageThemes stageThemes, NowPlayingBanner banner)
         {
             this.engine = engine;
             this.library = library;
             this.themes = themes;
+            this.stageThemes = stageThemes;
             this.banner = banner;
             SceneManager.activeSceneChanged += OnSceneChanged;
             Run.onClientGameOverGlobal += OnGameOver;
@@ -88,11 +98,15 @@ namespace CalamityMusic.Game
             // Let the game-over screen have its own music; nothing new starts until the next stage/run.
             runOver = true;
             if (state != State.Idle && kind != Kind.Preview) End(Time.unscaledTime);
+            else if (ambientActive) StopAmbient(2f);
         }
 
         private void OnSceneChanged(Scene from, Scene to)
         {
-            if (kind != Kind.Preview || Run.instance) Stop(0.6f);
+            // Stage music keeps playing through the loading screen; the next frame decides whether the
+            // new scene wants a different theme and crossfades if so.
+            if (state == State.Idle && ambientActive) ambientRetryAfter = 0f;
+            else if (kind != Kind.Preview || Run.instance) Stop(0.6f);
             handledTp = null;
             encounterTp = null;
             escape = null;
@@ -136,6 +150,7 @@ namespace CalamityMusic.Game
             if (ModConfig.Mode.Value == MusicMode.Vanilla || !engine.Available)
             {
                 if (state != State.Idle) Stop(0.8f);
+                else if (ambientActive) StopAmbient(0.8f);
                 return;
             }
 
@@ -151,6 +166,7 @@ namespace CalamityMusic.Game
 
             if (Run.instance) WatchTeleporter(now);
             Tick(now);
+            if (state == State.Idle) UpdateAmbient(now);
         }
 
         private void UpdateEngineSettings(float dt)
@@ -165,6 +181,7 @@ namespace CalamityMusic.Game
             }
 
             float volume = Mathf.Clamp01(ModConfig.Volume.Value / 100f) * gameVolume;
+            if (state == State.Idle && ambientActive) volume *= Mathf.Clamp01(ModConfig.StageVolume.Value / 100f);
             if (focusOnly && !Application.isFocused) volume = 0f;
             engine.Volume = volume;
             engine.BassBoostDb = ModConfig.BassBoost.Value;
@@ -436,6 +453,7 @@ namespace CalamityMusic.Game
             else engine.StartBuildup(new BuildupSynth(buildupLength, rng.Next()));
 
             VanillaMusic.FadeOut();
+            ambientActive = false; // the buildup fades the stage music out
             state = State.Buildup;
             stateStart = now;
             lastBossSeen = now;
@@ -472,6 +490,7 @@ namespace CalamityMusic.Game
 
             failedLoads = 0;
             VanillaMusic.FadeOut();
+            ambientActive = false;
             PlayTrack(track, LoopSongs, transition);
             state = State.Playing;
             kind = k;
@@ -497,6 +516,11 @@ namespace CalamityMusic.Game
             var track = ModConfig.MoonEscapeMusic.Value ? library.PickEscape(ModConfig.Mode.Value) : null;
             if (track == null)
             {
+                if (ModConfig.StageMusic.Value)
+                {
+                    kind = Kind.Escape; // no escape song: keep the fight song going until we're out
+                    return;
+                }
                 End(now); // let the vanilla escape music take over
                 return;
             }
@@ -522,6 +546,15 @@ namespace CalamityMusic.Game
 
         private void End(float now)
         {
+            if (StartAmbient(now, Transition.Crossfade(Mathf.Max(0.5f, ModConfig.FadeOutSeconds.Value))))
+            {
+                // The boss theme crossfades straight into the stage's area theme.
+                state = State.Idle;
+                kind = Kind.None;
+                theme = null;
+                pendingTheme = null;
+                return;
+            }
             engine.StopAll(Mathf.Max(0.2f, ModConfig.FadeOutSeconds.Value));
             VanillaMusic.FadeIn();
             state = State.Ending;
@@ -532,11 +565,104 @@ namespace CalamityMusic.Game
         {
             engine.StopAll(fade);
             VanillaMusic.FadeIn();
+            ambientActive = false;
+            ambientRetryAfter = 0f;
             state = State.Idle;
             kind = Kind.None;
             theme = null;
             pendingTheme = null;
             currentTrack = null;
+        }
+
+        // ------------------------------------------------------------------ stage music
+
+        private SceneDef cachedSceneDef;
+        private string cachedSceneName, cachedSceneDisplay;
+        private float ambientTimer;
+
+        private string CurrentScene(out string displayName)
+        {
+            var def = SceneCatalog.mostRecentSceneDef;
+            if (!def)
+            {
+                displayName = null;
+                return SceneManager.GetActiveScene().name;
+            }
+            if (def != cachedSceneDef)
+            {
+                cachedSceneDef = def;
+                cachedSceneName = string.IsNullOrEmpty(def.cachedName) ? def.baseSceneName : def.cachedName;
+                cachedSceneDisplay = null;
+                try { cachedSceneDisplay = Language.GetString(def.nameToken); } catch { /* language not loaded */ }
+            }
+            displayName = cachedSceneDisplay;
+            return cachedSceneName;
+        }
+
+        /// <summary>Whether this scene should play a Calamity area theme right now, and which.</summary>
+        private bool StageMusicWanted(out BossTheme stage)
+        {
+            stage = null;
+            if (!ModConfig.StageMusic.Value || runOver || !library.HasStageMusic) return false;
+            if (!Run.instance && !ModConfig.MenuMusic.Value) return false;
+            // A boss the player mapped to Vanilla keeps the game's boss music.
+            if (dominant != null && dominant.Value.Theme.KeepVanilla) return false;
+            string scene = CurrentScene(out string display);
+            if (string.IsNullOrEmpty(scene)) return false;
+            stage = stageThemes.Resolve(scene, display);
+            return stage != null && !stage.KeepVanilla;
+        }
+
+        private void UpdateAmbient(float now)
+        {
+            ambientTimer -= Time.unscaledDeltaTime;
+            if (ambientTimer > 0f) return;
+            ambientTimer = 0.2f;
+
+            if (!StageMusicWanted(out var stage))
+            {
+                if (ambientActive) StopAmbient(1.5f);
+                else VanillaMusic.FadeIn();
+                return;
+            }
+
+            bool playing = engine.ActiveMusicVoice != 0;
+            if (ambientActive && playing && (stage.Key == ambientScene || stage.SharesSlotWith(ambientTheme)))
+            {
+                // Same theme (e.g. menu -> character select): keep the song going.
+                ambientScene = stage.Key;
+                ambientTheme = stage;
+                return;
+            }
+            if (now < ambientRetryAfter) return;
+            StartAmbient(now, Transition.Crossfade(ambientActive && playing ? 2.5f : 2f));
+        }
+
+        private bool StartAmbient(float now, Transition transition)
+        {
+            if (!StageMusicWanted(out var stage)) return false;
+            var track = library.PickStage(stage.Slots, ModConfig.Mode.Value, ambientTrack);
+            if (track == null)
+            {
+                ambientRetryAfter = now + 10f;
+                return false;
+            }
+            PlayTrack(track, LoopSongs, transition);
+            VanillaMusic.FadeOut();
+            ambientActive = true;
+            ambientScene = stage.Key;
+            ambientTheme = stage;
+            ambientTrack = track;
+            ambientRetryAfter = now + 4f; // give it time to load before trying again
+            Log.Info($"Stage music: {stage.Key} -> {track}");
+            return true;
+        }
+
+        private void StopAmbient(float fade)
+        {
+            ambientActive = false;
+            engine.StopAll(fade);
+            VanillaMusic.FadeIn();
         }
 
         // ------------------------------------------------------------------ engine feedback
@@ -548,13 +674,30 @@ namespace CalamityMusic.Game
                 switch (e.Kind)
                 {
                     case EngineEventKind.TrackStarted:
-                        if (e.Message == "loop" || state == State.Idle || state == State.Ending || e.Track == null) break;
+                        if (e.Message == "loop" || state == State.Ending || e.Track == null) break;
+                        if (state == State.Idle && !(ambientActive && ModConfig.ShowStageNowPlaying.Value)) break;
                         // Later parts of a multi-part song carry straight on; the banner already showed the title.
                         if (ModConfig.ShowNowPlaying.Value && !library.IsContinuation(e.Track)) banner.Show(e.Track.Display);
                         break;
 
                     case EngineEventKind.TrackEnding:
                     {
+                        if (state == State.Idle && ambientActive && e.VoiceId == engine.ActiveMusicVoice)
+                        {
+                            var nextStagePart = library.NextInSequence(e.Track);
+                            if (nextStagePart != null)
+                                PlayTrack(nextStagePart, LoopSongs, Transition.Append());
+                            else if (!LoopSongs && ambientTheme != null)
+                            {
+                                var other = library.PickStage(ambientTheme.Slots, ModConfig.Mode.Value, e.Track);
+                                if (other != null)
+                                {
+                                    PlayTrack(other, false, Transition.Crossfade(3f));
+                                    ambientTrack = other;
+                                }
+                            }
+                            break;
+                        }
                         if (state != State.Playing || e.VoiceId != engine.ActiveMusicVoice) break;
                         var nextPart = library.NextInSequence(e.Track);
                         if (nextPart != null)
@@ -592,6 +735,7 @@ namespace CalamityMusic.Game
                         }
                         Log.Warning($"Could not play '{e.Track.Path}': {e.Message}");
                         library.MarkBad(e.Track);
+                        if (state == State.Idle && ambientActive) ambientRetryAfter = now + 1f; // pick another stage song
                         if (state == State.Playing && failedLoads++ < 3)
                             PlayNext(Transition.Drop(0f, 0.02f));
                         else if (state == State.Playing)

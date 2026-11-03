@@ -57,6 +57,12 @@ namespace CalamityMusic
         public static ConfigEntry<bool> AnySongFallback;
         public static ConfigEntry<bool> MoonEscapeMusic;
 
+        // Stage music
+        public static ConfigEntry<bool> StageMusic;
+        public static ConfigEntry<bool> MenuMusic;
+        public static ConfigEntry<float> StageVolume;
+        public static ConfigEntry<bool> ShowStageNowPlaying;
+
         // Now playing
         public static ConfigEntry<bool> ShowNowPlaying;
         public static ConfigEntry<float> NowPlayingSeconds;
@@ -99,6 +105,13 @@ namespace CalamityMusic
                 "If a boss has no songs in its theme folders (or in Generic), play any song from your library instead of the vanilla music.");
             MoonEscapeMusic = cfg.Bind(P, "Moon Escape Music", true,
                 "Play a song from the MoonEscape folder during the escape after Mithrix. If the folder is empty the vanilla escape music plays.");
+
+            const string St = "Stage Music";
+            StageMusic = cfg.Bind(St, "Stage Music", true,
+                "Replace the game's stage music too (every stage, Bazaar, Void, hidden realms, DLC and modded stages) with Calamity area themes. Which stage gets which theme is in CalamityMusic.StageThemes.cfg.");
+            MenuMusic = cfg.Bind(St, "Menu Music", true, "Play the Calamity title theme on the main menu and character select.");
+            StageVolume = cfg.Bind(St, "Stage Music Volume", 85f, "Stage music volume relative to boss music, 0-100%.");
+            ShowStageNowPlaying = cfg.Bind(St, "Show Now Playing For Stage Music", true, "Show the song banner when a stage theme starts too.");
 
             const string N = "Now Playing";
             ShowNowPlaying = cfg.Bind(N, "Show Now Playing", true, "Show the song name banner when a boss theme starts.");

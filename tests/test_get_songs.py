@@ -53,7 +53,8 @@ def make_env(home, fixtures):
 
     cal = ["DesertScourge", "CalamitasClone", "CalamitasPhase1", "CalamitasPhase2", "CalamitasPhase3", "CalamitasDefeat",
            "DevourerofGodsPhase1", "DevourerofGodsPhase2", "YharonPhase1", "YharonPhase2", "ExoMechs", "BossRushTier1",
-           "BossRushTier2", "Anahita", "AnahitasLure", "Leviathan", "BrimstoneElemental", "BrimstoneCrags", "AstralInfection"]
+           "BossRushTier2", "Anahita", "AnahitasLure", "Leviathan", "BrimstoneElemental", "BrimstoneCrags", "AstralInfection",
+           "CalamityTitle", "SunkenSea", "SulphurousSeaNight", "AbyssLayer4", "AbyssLayer3Alt", "BioLab"]
     write_tmod(os.path.join(ws, "2824688266", "2024.8", "CalamityModMusic.tmod"), "CalamityModMusic",
                [("Sounds/Music/" + n + ".ogg", ogg) for n in cal] + [("icon.png", b"png"), ("Info", b"x")])
     # Older copy for a previous tModLoader version: must be ignored.
@@ -61,11 +62,12 @@ def make_env(home, fixtures):
                [("Sounds/Music/Ravager.ogg", ogg)])
     write_tmod(os.path.join(ws, "3458992153", "2024.8", "InfernumModeMusic.tmod"), "InfernumModeMusic",
                [("Sounds/Music/" + n + ".ogg", ogg) for n in
-                ["Calamitas", "ExoMechBosses", "ExoMechBossesOld", "ZenithFabrications", "AdultEidolonWyrm", "Draedon", "StormBeforeDawn", "EyeOfCthulhu"]])
+                ["Calamitas", "ExoMechBosses", "ExoMechBossesOld", "ZenithFabrications", "AdultEidolonWyrm", "Draedon", "StormBeforeDawn",
+                 "EyeOfCthulhu", "TitleScreen"]])
     write_tmod(os.path.join(ws, "2995193002", "2024.8", "NoxusBoss.tmod"), "NoxusBoss",
                [("Assets/Sounds/Music/" + n + ".ogg", ogg) for n in
                 ["AvatarRift", "AvatarOfEmptinessP2", "AvatarOfEmptinessP3", "NamelessDeity",
-                 "ARIA BEYOND THE SHINING FIRMAMENT", "Mars", "EternalGarden", "EndCredits"]]
+                 "ARIA BEYOND THE SHINING FIRMAMENT", "Mars", "EternalGarden", "EndCredits", "RiftEclipseBlizzard", "StellarRequiem"]]
                + [("Assets/Sounds/Custom/Avatar/Ambience.ogg", ogg), ("Assets/Sounds/Custom/Mars/Mars.ogg", ogg)])
     write_tmod(os.path.join(ws, "1111", "2024.8", "SomeOtherMod.tmod"), "SomeOtherMod", [("Sounds/Music/DesertScourge.ogg", ogg)])
 
@@ -119,7 +121,17 @@ def main():
         "Extensions/AvatarOfEmptiness/ENNWAY! - PARADISE PARASITE [seq=avatar 3].ogg",
         "Extensions/NamelessDeity/Heart Plus Up! & ENNWAY! - ARIA BEYOND THE SHINING FIRMAMENT [seq=nameless 2].ogg",
         "Extensions/Mars/Moonburn - RAMifications.ogg",
-        "Extensions/Generic/ENNWAY! - Edenic Whispers.ogg",
+        "Extensions/Biome_EternalGarden/ENNWAY! - Edenic Whispers.ogg",
+        "Calamity/Biome_Title/DM DOKURO - The Tale of a Cruel World.ogg",
+        "Calamity/Biome_SunkenSea/DM DOKURO - sanctuary.ogg",
+        "Calamity/Biome_SulphurousNight/Heart Plus Up! - caustic tides.ogg",
+        "Calamity/Biome_Abyss4/DM DOKURO - void.ogg",
+        "Calamity/Biome_Lab/Heart Plus Up! - Engineer's Sanctum.ogg",
+        "Calamity/Biome_BrimstoneCrags/DM DOKURO - The Step Below Hell.ogg",
+        "Infernum/Biome_Title/PinpinNeon - Sky After Rain.ogg",
+        "Extensions/Biome_Blizzard/Moonburn - -273.15.ogg",
+        "Extensions/Biome_Stars/Moonburn - Stellar Requiem.ogg",
+        "Extensions/Biome_Credits/Moonburn - Wrath of the Gods.ogg",
         "Extensions/Astrageldon/DM DOKURO - Cosmic Disgust.mp3",
     ]
     failed = 0
@@ -131,13 +143,14 @@ def main():
     # Nothing that isn't a boss fight theme may land in a boss folder.
     placed = [os.path.relpath(os.path.join(r, f), music) for r, _d, fs in os.walk(music) for f in fs
               if not f.endswith(".txt")]
-    for bad in ("Defeat", "Lure", "Crags", "Eulogy", "8-bit", "Old", "Draedon", "Ambience", "EndCredits", "Ravager"):
-        hits = [p for p in placed if bad.lower() in p.lower()]
+    boss_files = [p for p in placed if "biome_" not in p.lower()]
+    for bad in ("Defeat", "Lure", "Crags", "Eulogy", "8-bit", "Old", "Draedon", "Ambience", "EndCredits", "Ravager", "Edenic", "sanctuary"):
+        hits = [p for p in boss_files if bad.lower() in p.lower()]
         failed += bool(hits)
         print(("  FAIL " + str(hits)) if hits else f"  ok   no '{bad}' in boss folders")
 
     unsorted = os.path.join(os.path.dirname(music), "Unsorted")
-    for rel in ("Calamity/CalamitasDefeat.ogg", "Calamity/BrimstoneCrags.ogg", "Infernum/ExoMechBossesOld.ogg"):
+    for rel in ("Calamity/CalamitasDefeat.ogg", "Calamity/AbyssLayer3Alt.ogg", "Infernum/ExoMechBossesOld.ogg"):
         ok = os.path.isfile(os.path.join(unsorted, rel))
         failed += not ok
         print(("  ok   " if ok else "  FAIL ") + "kept in Unsorted: " + rel)

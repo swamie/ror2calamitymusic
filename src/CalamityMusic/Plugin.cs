@@ -29,6 +29,7 @@ namespace CalamityMusic
         private MusicEngine engine;
         private MusicLibrary library;
         private BossThemes themes;
+        private StageThemes stageThemes;
         private MusicDirector director;
         private NowPlayingBanner banner;
         private Harmony harmony;
@@ -52,6 +53,7 @@ namespace CalamityMusic
             library.RescanAsync();
 
             themes = new BossThemes(Paths.ConfigPath);
+            stageThemes = new StageThemes(Paths.ConfigPath);
 
             ApplyPatches();
 
@@ -61,7 +63,7 @@ namespace CalamityMusic
             banner = gameObject.AddComponent<NowPlayingBanner>();
             banner.Init(() => engine.BassLevel);
             director = gameObject.AddComponent<MusicDirector>();
-            director.Init(engine, library, themes, banner);
+            director.Init(engine, library, themes, stageThemes, banner);
 
             SetupSettingsMenu();
 
@@ -140,6 +142,7 @@ namespace CalamityMusic
                     {
                         library.RescanAsync();
                         themes.Reload();
+                        stageThemes.Reload();
                     }));
 
                 ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.BuildupEnabled));
@@ -153,6 +156,11 @@ namespace CalamityMusic
                 ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.MuffleWhenPaused));
                 ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.AnySongFallback));
                 ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.MoonEscapeMusic));
+
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.StageMusic));
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.MenuMusic));
+                ModSettingsManager.AddOption(new SliderOption(ModConfig.StageVolume, new SliderConfig { min = 0f, max = 100f, FormatString = "{0:0}%" }));
+                ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.ShowStageNowPlaying));
 
                 ModSettingsManager.AddOption(new CheckBoxOption(ModConfig.ShowNowPlaying));
                 ModSettingsManager.AddOption(new StepSliderOption(ModConfig.NowPlayingSeconds, new StepSliderConfig { min = 2f, max = 15f, increment = 0.5f, FormatString = "{0:0.0} s" }));
