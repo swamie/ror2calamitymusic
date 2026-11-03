@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1
+
+- Fixes from a code review: no burst of music when it's stopped during the death tape stop, a steady heartbeat when your health changes, no double impact on a replaced drop, broken or banned song parts are skipped instead of retried forever, and favourites apply to a whole multi-part song.
+- Multiplayer: the sync hello goes out on its own a few seconds after joining, so a host without the mod can't lose other messages to it. A host's pick that arrives while your own song is loading now takes over the drop.
+- A message a few seconds into a stage when there are no songs yet, or when stage music is on but no area themes are installed.
+- Get Songs finds the newer Thunderstore app's profiles too.
+
 ## 1.1.0
 
 - Boss title cards. The boss's name slams in at the top of the screen with its title, lens flares and themed particles when its theme drops.
